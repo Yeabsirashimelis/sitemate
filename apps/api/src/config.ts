@@ -17,6 +17,9 @@ const schema = z.object({
   DATABASE_URL: optional,
   PGLITE_DIR: z.string().default(".data/pglite"),
 
+  /** Sign-up and sign-in attempts allowed per IP address per minute. */
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
+
   /** Allowed origin for the dashboard. */
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
   /** Public URL of this API, used for the Telegram webhook in production. */
@@ -27,6 +30,8 @@ const schema = z.object({
   GEMINI_EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
 
   TELEGRAM_BOT_TOKEN: optional,
+  /** Bot username without @, used to build invite links. */
+  TELEGRAM_BOT_USERNAME: optional,
   TELEGRAM_MODE: z.enum(["polling", "webhook", "off"]).optional(),
   TELEGRAM_WEBHOOK_SECRET: optional,
 

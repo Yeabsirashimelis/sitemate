@@ -34,6 +34,9 @@ export function registerErrorHandler(app: FastifyInstance): void {
       });
     }
     const statusCode = "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
+    if (statusCode === 429) {
+      return reply.status(429).send({ error: { code: "rate_limited", message: error.message } });
+    }
     if (statusCode < 500) {
       return reply.status(statusCode).send({ error: { code: error.code ?? "bad_request", message: error.message } });
     }

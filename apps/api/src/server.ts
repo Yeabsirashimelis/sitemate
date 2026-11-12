@@ -13,6 +13,7 @@ await database.migrate();
 
 const app = await buildApp({
   config,
+  db: database.db,
   readinessChecks: [{ name: "database", check: database.ping }],
 });
 app.addHook("onClose", () => database.close());
