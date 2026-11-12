@@ -1,0 +1,24 @@
+{
+  "name": "@sitemate/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SiteMate backend: API, Telegram intake, agents and scheduled jobs",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sitemate/engine": "workspace:*",
+    "fastify": "^5.12.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "pino-pretty": "^13.2.0",
+    "tsx": "^4.23.15"
+  }
+}
