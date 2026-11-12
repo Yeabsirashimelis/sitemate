@@ -19,6 +19,9 @@ const calendarSchema = z.object({
   holidays: z.array(isoDate).max(200),
 });
 
+/** On a new project the holidays can be left out: the Ethiopian public holidays over the contract are used. */
+const newCalendarSchema = calendarSchema.extend({ holidays: calendarSchema.shape.holidays.optional() });
+
 const projectBody = z
   .object({
     name: z.string().trim().min(2).max(160),
@@ -29,7 +32,7 @@ const projectBody = z
     longitude: z.number().min(-180).max(180).optional(),
     startDate: isoDate,
     contractFinish: isoDate,
-    calendar: calendarSchema.optional(),
+    calendar: newCalendarSchema.optional(),
     liquidatedDamagesPerDay: z.number().nonnegative().optional(),
     retentionPercent: z.number().min(0).max(20).default(5),
     checkInTime: z
@@ -82,9 +85,9 @@ export function projectRoutes(app: FastifyInstance, db: Database): void {
           startDate: body.startDate,
           contractFinish: body.contractFinish,
           dataDate: body.startDate,
-          calendar: body.calendar ?? {
-            workingWeekdays: [1, 2, 3, 4, 5, 6],
-            holidays: defaultHolidays(body.startDate, body.contractFinish),
+          calendar: {
+            workingWeekdays: body.calendar?.workingWeekdays ?? [1, 2, 3, 4, 5, 6],
+            holidays: body.calendar?.holidays ?? defaultHolidays(body.startDate, body.contractFinish),
           },
           liquidatedDamagesPerDay: body.liquidatedDamagesPerDay ?? null,
           retentionPercent: body.retentionPercent,

@@ -201,6 +201,11 @@ export function materialRoutes(app: FastifyInstance, db: Database): void {
   app.post("/suppliers", async (request, reply) => {
     const user = requireRole(request, MANAGER_ROLES);
     const body = supplierBody.parse(request.body);
+    const [same] = await db
+      .select({ id: suppliers.id })
+      .from(suppliers)
+      .where(and(eq(suppliers.companyId, user.companyId), sql`lower(${suppliers.name}) = lower(${body.name})`));
+    if (same) throw conflict(`${body.name} is already on your supplier list`);
     const supplier = await db.transaction(async (tx) => {
       const [account] = await tx
         .insert(users)
