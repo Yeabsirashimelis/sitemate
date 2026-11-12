@@ -15,6 +15,7 @@ import { openDatabase, type DatabaseHandle } from "./db/client.js";
 import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
+import { registerCostFeature } from "./features/cost.js";
 import { registerProcurementFeature } from "./features/procurement.js";
 import { registerQuotesFeature } from "./features/quotes.js";
 import { registerScheduleFeature } from "./features/schedule.js";
@@ -118,6 +119,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerWeatherFeature(deps);
   registerProcurementFeature(deps);
   registerQuotesFeature(deps);
+  registerCostFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 
@@ -127,7 +129,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     db: database.db,
     readinessChecks: [{ name: "database", check: database.ping }],
     onTelegramUpdate: () => runner.poke(),
-    services: { approvals, scheduler },
+    services: { approvals, scheduler, deps },
   });
 
   const poller =

@@ -209,6 +209,8 @@ export const projects = pgTable(
     /** Penalty per day of delay, from the contract. */
     liquidatedDamagesPerDay: money("liquidated_damages_per_day"),
     retentionPercent: numeric("retention_percent", { precision: 5, scale: 2, mode: "number" }).notNull().default(5),
+    /** Daily labour rates in birr by trade, e.g. { mason: 900, labourer: 450 }. "default" covers other trades. */
+    labourRates: jsonb("labour_rates").$type<Record<string, number>>().notNull().default({}),
     /** Local time the evening check-in goes out, HH:MM. */
     checkInTime: text("check_in_time").notNull().default("17:00"),
     active: boolean("active").notNull().default(true),

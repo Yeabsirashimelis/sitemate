@@ -15,6 +15,13 @@
       "when": 1794477110558,
       "tag": "0001_schedule_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794478223122,
+      "tag": "0002_labour_rates",
+      "breakpoints": true
     }
   ]
 }

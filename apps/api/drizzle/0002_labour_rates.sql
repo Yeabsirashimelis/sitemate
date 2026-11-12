@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "labour_rates" jsonb DEFAULT '{}'::jsonb NOT NULL;

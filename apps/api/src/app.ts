@@ -11,6 +11,8 @@ import type { ApprovalService } from "./approvals/service.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { jobRoutes } from "./routes/jobs.js";
 import type { Scheduler } from "./scheduler.js";
+import type { FeatureDeps } from "./features/types.js";
+import { costRoutes } from "./routes/cost.js";
 import { authRoutes } from "./routes/auth.js";
 import { materialRoutes } from "./routes/materials.js";
 import { projectRoutes } from "./routes/projects.js";
@@ -34,6 +36,7 @@ export interface AppOptions {
 export interface AppServices {
   approvals: ApprovalService;
   scheduler: Scheduler;
+  deps: FeatureDeps;
 }
 
 export async function buildApp({
@@ -90,6 +93,7 @@ export async function buildApp({
     if (services) {
       approvalRoutes(app, db, services.approvals);
       jobRoutes(app, config, services.scheduler);
+      costRoutes(app, db, services.deps);
     }
   }
 
