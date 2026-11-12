@@ -11,5 +11,8 @@ export default defineConfig({
   test: {
     environment: "node",
     testTimeout: 20_000,
+    // Every test file starts its own embedded Postgres; a few at a time keeps memory use predictable.
+    pool: "forks",
+    maxWorkers: 3,
   },
 });
