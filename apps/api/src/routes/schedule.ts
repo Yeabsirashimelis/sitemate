@@ -4,11 +4,12 @@ import { z } from "zod";
 import { DASHBOARD_ROLES, MANAGER_ROLES } from "../auth/permissions.js";
 import { audit } from "../audit.js";
 import type { Database } from "../db/client.js";
-import { activities, activityLinks, recoveryMeasures } from "../db/schema.js";
+import { activities, activityLinks, recoveryMeasures, weeklyPlans } from "../db/schema.js";
 import { whatIf } from "../features/schedule.js";
 import { requireRole } from "../http/auth.js";
 import { badRequest, notFound } from "../http/errors.js";
 import { getAccessibleProject } from "../services/access.js";
+import { buildLookahead } from "../services/lookahead.js";
 
 const projectParams = z.object({ projectId: z.uuid() });
 const measureParams = z.object({ projectId: z.uuid(), measureId: z.uuid() });
@@ -99,6 +100,18 @@ export function scheduleRoutes(app: FastifyInstance, db: Database): void {
       .returning();
     if (deleted.length === 0) throw notFound("Recovery measure");
     return reply.status(204).send();
+  });
+
+  app.get("/projects/:projectId/lookahead", async (request) => {
+    const user = requireRole(request, DASHBOARD_ROLES);
+    const { projectId } = projectParams.parse(request.params);
+    await getAccessibleProject(db, user, projectId);
+    const lookahead = await buildLookahead(db, projectId);
+    const plans = await db.select().from(weeklyPlans).where(eq(weeklyPlans.projectId, projectId)).orderBy(asc(weeklyPlans.weekStart));
+    return {
+      ...lookahead,
+      plans: plans.map((p) => ({ weekStart: p.weekStart, weekEnd: p.weekEnd, committed: p.committed, completed: p.completed, percentPlanComplete: p.percentPlanComplete })),
+    };
   });
 
   /** Tries a delay on a copy of the schedule. Nothing is saved. */

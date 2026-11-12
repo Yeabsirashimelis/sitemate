@@ -825,3 +825,31 @@ export const jobs = pgTable(
     uniqueIndex("jobs_idempotency_key").on(t.idempotencyKey),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Weekly planning
+// ---------------------------------------------------------------------------
+
+/**
+ * The work committed for a week, so the following week the plan can be
+ * scored: percent plan complete is the share of committed activities that
+ * were actually finished.
+ */
+export const weeklyPlans = pgTable(
+  "weekly_plans",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    weekStart: date("week_start").notNull(),
+    weekEnd: date("week_end").notNull(),
+    /** Activities planned to finish within the week. */
+    committed: jsonb("committed").$type<string[]>().notNull(),
+    /** Filled in when the week is scored. */
+    completed: jsonb("completed").$type<string[]>(),
+    percentPlanComplete: numeric("percent_plan_complete", { precision: 5, scale: 1, mode: "number" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("weekly_plans_project_week_key").on(t.projectId, t.weekStart)],
+);
