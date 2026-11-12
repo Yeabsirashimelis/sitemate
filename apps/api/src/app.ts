@@ -6,6 +6,7 @@ import type { Database } from "./db/client.js";
 import { registerAuth } from "./http/auth.js";
 import { registerErrorHandler } from "./http/errors.js";
 import { authRoutes } from "./routes/auth.js";
+import { projectRoutes } from "./routes/projects.js";
 import { userRoutes } from "./routes/users.js";
 
 export interface AppOptions {
@@ -61,6 +62,7 @@ export async function buildApp({ config, db, readinessChecks = [] }: AppOptions)
     registerAuth(app, db);
     authRoutes(app, db, config);
     userRoutes(app, db, config);
+    projectRoutes(app, db);
   }
 
   return app;

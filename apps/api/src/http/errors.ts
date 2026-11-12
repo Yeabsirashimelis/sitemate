@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyInstance } from "fastify";
 import { ZodError } from "zod";
+import { ImportError } from "../domain/schedule-import.js";
 
 /** An error that is safe to show to the caller, with an HTTP status. */
 export class AppError extends Error {
@@ -20,9 +21,12 @@ export const badRequest = (message: string, details?: unknown) => new AppError(4
 export const conflict = (message: string) => new AppError(409, "conflict", message);
 
 export function registerErrorHandler(app: FastifyInstance): void {
-  app.setErrorHandler((error: FastifyError | AppError | ZodError, request, reply) => {
+  app.setErrorHandler((error: FastifyError | AppError | ZodError | ImportError, request, reply) => {
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({ error: { code: error.code, message: error.message, details: error.details } });
+    }
+    if (error instanceof ImportError) {
+      return reply.status(422).send({ error: { code: "import_failed", message: error.message, details: error.problems } });
     }
     if (error instanceof ZodError) {
       return reply.status(400).send({
