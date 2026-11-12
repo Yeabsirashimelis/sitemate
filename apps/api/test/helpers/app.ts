@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { loadConfig, type Config } from "../../src/config.js";
 import type { DatabaseHandle } from "../../src/db/client.js";
 import { createRuntime, type Runtime } from "../../src/runtime.js";
+import { FakeLlm } from "./llm.js";
 import { createTestDatabase } from "./db.js";
 import { FakeTelegramApi } from "./telegram.js";
 
@@ -11,6 +12,7 @@ export interface TestApp {
   config: Config;
   runtime: Runtime;
   telegram: FakeTelegramApi;
+  llm: FakeLlm;
   close(): Promise<void>;
 }
 
@@ -18,13 +20,15 @@ export async function createTestApp(env: Record<string, string> = {}): Promise<T
   const handle = await createTestDatabase();
   const config = loadConfig({ NODE_ENV: "test", AUTH_RATE_LIMIT_PER_MINUTE: "1000", ...env });
   const telegram = new FakeTelegramApi();
-  const runtime = await createRuntime(config, { database: handle, telegramApi: telegram });
+  const llm = new FakeLlm();
+  const runtime = await createRuntime(config, { database: handle, telegramApi: telegram, llm });
   return {
     app: runtime.app,
     handle,
     config,
     runtime,
     telegram,
+    llm,
     close: () => runtime.stop(),
   };
 }

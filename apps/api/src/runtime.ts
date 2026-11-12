@@ -7,9 +7,11 @@
 import type { FastifyInstance } from "fastify";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { DisabledLlm, GeminiClient, type LlmClient } from "./ai/llm.js";
 import { buildApp } from "./app.js";
 import type { Config } from "./config.js";
 import { openDatabase, type DatabaseHandle } from "./db/client.js";
+import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { JobRunner } from "./jobs/queue.js";
 import { createLogger } from "./logger.js";
 import { HttpTelegramApi, type TelegramApi } from "./telegram/api.js";
@@ -20,6 +22,7 @@ export interface RuntimeOverrides {
   database?: DatabaseHandle;
   /** null disables Telegram even when a token is configured. */
   telegramApi?: TelegramApi | null;
+  llm?: LlmClient;
   logger?: Logger;
 }
 
@@ -29,6 +32,7 @@ export interface Runtime {
   database: DatabaseHandle;
   runner: JobRunner;
   bot: TelegramBot | null;
+  llm: LlmClient;
   app: FastifyInstance;
   /** Starts background work: the job runner and, in development, Telegram polling. */
   start(): Promise<void>;
@@ -43,6 +47,17 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   await database.migrate();
 
   const runner = new JobRunner(database.db, logger);
+
+  const llm =
+    overrides.llm ??
+    (config.GEMINI_API_KEY
+      ? new GeminiClient({
+          apiKey: config.GEMINI_API_KEY,
+          model: config.GEMINI_MODEL,
+          embeddingModel: config.GEMINI_EMBEDDING_MODEL,
+          embeddingDimensions: EMBEDDING_DIMENSIONS,
+        })
+      : new DisabledLlm());
 
   const telegramApi =
     overrides.telegramApi !== undefined
@@ -77,6 +92,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     database,
     runner,
     bot,
+    llm,
     app,
     start: async () => {
       if (telegramApi && config.telegramMode === "webhook") {

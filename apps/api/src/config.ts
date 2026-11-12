@@ -26,7 +26,7 @@ const schema = z.object({
   PUBLIC_URL: optional,
 
   GEMINI_API_KEY: optional,
-  GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.8-flash"),
   GEMINI_EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
 
   TELEGRAM_BOT_TOKEN: optional,
