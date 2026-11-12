@@ -32,6 +32,8 @@ export interface ExecutionContext {
 interface ExecutorDefinition {
   schema: z.ZodType;
   run: (action: unknown, context: ExecutionContext) => Promise<unknown>;
+  /** Tidies up when a person says no, e.g. cancels the purchase request. */
+  onReject?: ((action: unknown, context: ExecutionContext) => Promise<void>) | undefined;
 }
 
 export interface Proposal {
@@ -76,9 +78,14 @@ export class ApprovalService {
     });
   }
 
-  register<S extends z.ZodType>(type: string, schema: S, run: (action: z.infer<S>, context: ExecutionContext) => Promise<unknown>): this {
+  register<S extends z.ZodType>(
+    type: string,
+    schema: S,
+    run: (action: z.infer<S>, context: ExecutionContext) => Promise<unknown>,
+    options: { onReject?: (action: z.infer<S>, context: ExecutionContext) => Promise<void> } = {},
+  ): this {
     if (this.executors.has(type)) throw new Error(`Executor "${type}" is already registered`);
-    this.executors.set(type, { schema, run: run as ExecutorDefinition["run"] });
+    this.executors.set(type, { schema, run: run as ExecutorDefinition["run"], onReject: options.onReject as ExecutorDefinition["onReject"] });
     return this;
   }
 
@@ -224,8 +231,15 @@ export class ApprovalService {
 
     let final = claimed;
     if (decision === "approved") final = await this.execute(claimed, user);
+    else await this.rejected(claimed, user);
     await this.clearButtons(final);
     return final;
+  }
+
+  private async rejected(approval: Approval, user: User): Promise<void> {
+    const executor = this.executors.get(approval.action.type);
+    if (!executor?.onReject) return;
+    await executor.onReject(executor.schema.parse(approval.action), { db: this.db, approval, decidedBy: user });
   }
 
   private async execute(approval: Approval, user: User): Promise<Approval> {

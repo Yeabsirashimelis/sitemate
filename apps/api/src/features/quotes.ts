@@ -77,6 +77,13 @@ export function registerQuotesFeature(deps: FeatureDeps): void {
       }
     }
     return { ordered: true, supplier: row.supplier.name, totalEtb: row.quote.unitPriceEtb * row.request.quantity };
+  }, {
+    onReject: async (action, context) => {
+      await context.db
+        .update(purchaseRequests)
+        .set({ status: "cancelled" })
+        .where(and(eq(purchaseRequests.id, action.purchaseRequestId), eq(purchaseRequests.status, "approved")));
+    },
   });
 
   scheduler.add("procurement.quote-deadline", async () => {

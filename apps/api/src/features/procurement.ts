@@ -61,6 +61,14 @@ export function registerProcurementFeature(deps: FeatureDeps): void {
     await context.db.update(purchaseRequests).set({ status: "approved" }).where(eq(purchaseRequests.id, row.request.id));
     const asked = await requestQuotes(deps, { request: row.request, project: row.project, materialName: forecast.material.name, unit: forecast.material.unit });
     return { asked };
+  }, {
+    // Turned down: close the request so a later stock check can raise a fresh one.
+    onReject: async (action, context) => {
+      await context.db
+        .update(purchaseRequests)
+        .set({ status: "cancelled" })
+        .where(and(eq(purchaseRequests.id, action.purchaseRequestId), eq(purchaseRequests.status, "pending_approval")));
+    },
   });
 }
 
