@@ -55,4 +55,6 @@ export class EventBus {
 export const EVENTS = {
   /** A daily log was completed and applied to the schedule and stock. */
   dailyLogCompleted: "daily_log.completed",
+  /** A delay was recorded on an activity, with its effect on the handover date. */
+  delayRecorded: "delay.recorded",
 } as const;

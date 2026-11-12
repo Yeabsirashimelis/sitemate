@@ -248,6 +248,8 @@ export const activities = pgTable(
     /** Baseline dates as workday indexes, set when the baseline is approved. */
     baselineStart: integer("baseline_start"),
     baselineFinish: integer("baseline_finish"),
+    /** Held until this date, e.g. a pour moved past forecast rain. */
+    startNoEarlierThan: date("start_no_earlier_than"),
     actualStart: date("actual_start"),
     actualFinish: date("actual_finish"),
     remainingDuration: integer("remaining_duration"),
@@ -301,6 +303,8 @@ export const recoveryMeasures = pgTable("recovery_measures", {
     .notNull(),
   cost: money("cost").notNull(),
   risk: text("risk", { enum: ["low", "medium", "high"] }).notNull(),
+  /** Set once the measure has been put into the schedule, so it is not offered again. */
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 

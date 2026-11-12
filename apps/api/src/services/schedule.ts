@@ -51,6 +51,7 @@ export async function loadProjectSchedule(db: Executor, projectId: string): Prom
       name: row.name,
       duration: row.duration,
       predecessors: predecessorsByActivity.get(row.id) ?? [],
+      ...(row.startNoEarlierThan ? { startNoEarlierThan: row.startNoEarlierThan } : {}),
       ...(row.actualStart ? { actualStart: row.actualStart } : {}),
       ...(row.actualFinish ? { actualFinish: row.actualFinish } : {}),
       ...(row.remainingDuration !== null ? { remainingDuration: row.remainingDuration } : {}),
@@ -94,6 +95,7 @@ export function serializeSchedule(result: ScheduleResult, schedule: ProjectSched
         critical: a.critical,
         baselineStart: row.baselineStart,
         baselineFinish: row.baselineFinish,
+        startNoEarlierThan: row.startNoEarlierThan,
         actualStart: row.actualStart,
         actualFinish: row.actualFinish,
       };

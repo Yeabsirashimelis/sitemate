@@ -11,6 +11,7 @@ import type { ApprovalService } from "./approvals/service.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { authRoutes } from "./routes/auth.js";
 import { projectRoutes } from "./routes/projects.js";
+import { scheduleRoutes } from "./routes/schedule.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { userRoutes } from "./routes/users.js";
 
@@ -79,6 +80,7 @@ export async function buildApp({
     authRoutes(app, db, config);
     userRoutes(app, db, config);
     projectRoutes(app, db);
+    scheduleRoutes(app, db);
     telegramRoutes(app, db, config, onTelegramUpdate);
     if (services) {
       approvalRoutes(app, db, services.approvals);

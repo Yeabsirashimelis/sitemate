@@ -14,6 +14,8 @@ import type { Config } from "./config.js";
 import { openDatabase, type DatabaseHandle } from "./db/client.js";
 import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
+import { registerNotifyFeature } from "./features/notify.js";
+import { registerScheduleFeature } from "./features/schedule.js";
 import { registerSiteFeature } from "./features/site.js";
 import type { FeatureDeps } from "./features/types.js";
 import { JobRunner } from "./jobs/queue.js";
@@ -96,7 +98,9 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     approvals,
     now: overrides.now ?? (() => new Date()),
   };
+  registerNotifyFeature(deps);
   registerSiteFeature(deps);
+  registerScheduleFeature(deps);
 
   const app = await buildApp({
     config,
