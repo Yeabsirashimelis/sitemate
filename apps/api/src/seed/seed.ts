@@ -232,6 +232,8 @@ export async function seedDemo(db: Database, options: { today: string; password:
     const predecessorsAllow = (code: string) =>
       (links.get(code) ?? []).every((link) => (link.type === "SS" ? (progress.get(link.code) ?? 0) > 0 : (progress.get(link.code) ?? 0) >= 100));
     let logs = 0;
+    // Running stock, so deliveries arrive the way a storekeeper would order them.
+    const stock = new Map<string, number>(materialDefs.map((m) => [m.name, m.stock]));
     for (let day = 0; day < todayIndex; day++) {
       const date = calendar.dateOf(day);
       const working = baseline.order
@@ -267,10 +269,21 @@ export async function seedDemo(db: Database, options: { today: string; password:
         { trade: "Carpenter", count: 2 + Math.round(wobble(`c${date}`) * 3) },
         { trade: "Labourer", count: 8 + Math.round(wobble(`l${date}`) * 8) },
       ];
-      const received = day % 9 === 4 ? [{ material: "Cement", quantity: 400, unit: "bag" }] : day % 11 === 6 ? [{ material: "HCB blocks", quantity: 2_500, unit: "pcs" }] : [];
+      // A delivery the day after stock drops below a third of the opening amount.
+      const received: CheckedLog["materialsReceived"] = [];
+      for (const m of materialDefs) {
+        const left = (stock.get(m.name) ?? 0) - (used[m.name] ?? 0);
+        if (left < m.stock / 3) {
+          const quantity = Math.round(m.stock * 0.8 * 10) / 10;
+          received.push({ material: m.name, quantity, unit: m.unit });
+          stock.set(m.name, left + quantity);
+        } else {
+          stock.set(m.name, left);
+        }
+      }
       const names = reported.map((r) => schedule.byCode.get(r.activityCode)!.name.toLowerCase());
       const checked: CheckedLog = {
-        summary: `Worked on ${names.join(", ")}. ${workers.reduce((s, w) => s + w.count, 0)} workers on site.${received.length ? ` ${received[0]!.quantity} ${received[0]!.unit} of ${received[0]!.material} delivered.` : ""}`,
+        summary: `Worked on ${names.join(", ")}. ${workers.reduce((s, w) => s + w.count, 0)} workers on site.${received.length ? ` Delivered: ${received.map((r) => `${r.quantity} ${r.unit} of ${r.material}`).join(", ")}.` : ""}`,
         weather: wobble(`w${date}`) > 0.8 ? "Light rain in the afternoon" : "Dry",
         workers,
         progress: reported,

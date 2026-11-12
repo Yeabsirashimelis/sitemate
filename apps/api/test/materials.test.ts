@@ -100,6 +100,22 @@ describe("material forecast", () => {
   });
 });
 
+describe("stock shortfall", () => {
+  it("explains a shortfall instead of quoting negative stock", async () => {
+    const site = await setupSiteProject(t);
+    const cement = site.materials.cement;
+    await t.handle.db.insert(materialTransactions).values([
+      { materialId: cement.id, date: "2026-01-03", kind: "usage", quantity: 230, progress: 460, note: "More used than delivered" },
+    ]);
+    await recomputeStock(t.handle.db, [cement.id]);
+    expect(await checkMaterials(t.runtime.deps, site.projectId)).toBe(1);
+    const [approval] = await t.handle.db.select().from(approvals).where(eq(approvals.projectId, site.projectId));
+    expect(approval!.summary).toMatch(/^Cement: none left on site by the records \(30 bag more used than delivered, so check for an unreported delivery\)/);
+    expect(approval!.summary).toContain("so it should be ordered now");
+    expect(approval!.summary).not.toMatch(/-\d+ bag on site/);
+  });
+});
+
 describe("material routes", () => {
   it("adds materials with opening stock, refuses duplicates and records adjustments", async () => {
     const site = await setupSiteProject(t);

@@ -8,7 +8,7 @@ import { documentChunks, documentFiles, documentKind, documents } from "../db/sc
 import { askProject, INDEX_DOCUMENT_JOB } from "../features/documents.js";
 import type { FeatureDeps } from "../features/types.js";
 import { requireRole } from "../http/auth.js";
-import { badRequest, notFound } from "../http/errors.js";
+import { badRequest, conflict, notFound } from "../http/errors.js";
 import { enqueue } from "../jobs/queue.js";
 import { getAccessibleProject } from "../services/access.js";
 import { PDF_TYPE, searchDocuments, TEXT_TYPES } from "../services/documents.js";
@@ -81,6 +81,25 @@ export function documentRoutes(app: FastifyInstance, db: Database, deps: Feature
       .returning();
     if (deleted.length === 0) throw notFound("Document");
     return reply.status(204).send();
+  });
+
+  /** Queues a document that is stuck or failed to be read again. */
+  app.post("/projects/:projectId/documents/:documentId/read", async (request, reply) => {
+    const user = requireRole(request, MANAGER_ROLES);
+    const { projectId, documentId } = documentParams.parse(request.params);
+    await getAccessibleProject(db, user, projectId);
+    const [row] = await db
+      .select({ document: documents, hasFile: documentFiles.documentId })
+      .from(documents)
+      .leftJoin(documentFiles, eq(documentFiles.documentId, documents.id))
+      .where(and(eq(documents.id, documentId), eq(documents.projectId, projectId)));
+    if (!row) throw notFound("Document");
+    if (row.document.status === "indexed") throw conflict("This document has already been read");
+    if (!row.hasFile) throw conflict("The original file is no longer stored. Upload it again.");
+    await db.update(documents).set({ status: "pending", error: null }).where(eq(documents.id, documentId));
+    await enqueue(db, INDEX_DOCUMENT_JOB, { documentId }, { idempotencyKey: `index:${documentId}:${Date.now()}` });
+    onQueued();
+    return reply.status(202).send({ queued: true });
   });
 
   app.get("/projects/:projectId/documents/search", async (request) => {

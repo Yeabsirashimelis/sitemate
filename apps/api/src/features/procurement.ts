@@ -116,9 +116,19 @@ async function requestQuotes(
 function reasonText(forecast: MaterialForecast, quantity: number): string {
   const { material } = forecast;
   const perDay = Math.round(forecast.dailyUse * 10) / 10;
+  const onHand = Math.round(material.onHand);
+  // Recorded use can run ahead of recorded deliveries, e.g. when a delivery was never reported.
+  const stock =
+    onHand > 0
+      ? `${material.name}: ${onHand} ${material.unit} on site, about ${perDay} ${material.unit} a day planned over the next three weeks.`
+      : `${material.name}: none left on site by the records${onHand < 0 ? ` (${-onHand} ${material.unit} more used than delivered, so check for an unreported delivery)` : ""}, and about ${perDay} ${material.unit} a day planned over the next three weeks.`;
+  const timing =
+    onHand > 0
+      ? `At that rate it runs out on ${longDate(forecast.runOutDate!)}. Suppliers need ${plural(material.leadTimeDays, "day")}, so an order has to go out by ${longDate(forecast.orderBy!)}.`
+      : `Suppliers need ${plural(material.leadTimeDays, "day")}, so it should be ordered now.`;
   return [
-    `${material.name}: ${Math.round(material.onHand)} ${material.unit} on site, about ${perDay} ${material.unit} a day planned over the next three weeks.`,
-    `At that rate it runs out on ${longDate(forecast.runOutDate!)}. Suppliers need ${plural(material.leadTimeDays, "day")}, so an order has to go out by ${longDate(forecast.orderBy!)}.`,
+    stock,
+    timing,
     `Suggested order: ${quantity} ${material.unit}${material.lastUnitPrice ? `, about ${birr(quantity * material.lastUnitPrice)} at the last price of ${birr(material.lastUnitPrice)} per ${material.unit}` : ""}.`,
   ].join(" ");
 }

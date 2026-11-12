@@ -202,6 +202,16 @@ describe("documents and Ask SiteMate", () => {
     const broken = await upload(site.owner.auth, site.projectId, "Unreadable", "other", "%PDF-1.7 broken", "application/pdf");
     const [failed] = await t.handle.db.select().from(documents).where(eq(documents.id, broken.id));
     expect(failed!.status).toBe("failed");
+
+    // Once the model can read it, the document can be read again from the dashboard.
+    t.llm.when("convert a construction contract", { sections: [{ clause: "1", heading: "Scope", page: 1, text: "1 Scope\nThe works." }] });
+    const again = await t.app.inject({ method: "POST", url: `/projects/${site.projectId}/documents/${broken.id}/read`, headers: site.owner.auth });
+    expect(again.statusCode).toBe(202);
+    await t.runtime.runner.drain();
+    const [read] = await t.handle.db.select().from(documents).where(eq(documents.id, broken.id));
+    expect(read!.status).toBe("indexed");
+    const twice = await t.app.inject({ method: "POST", url: `/projects/${site.projectId}/documents/${broken.id}/read`, headers: site.owner.auth });
+    expect(twice.statusCode).toBe(409);
   });
 
   it("refuses unsupported files", async () => {
