@@ -36,6 +36,13 @@
       "when": 1794478656706,
       "tag": "0004_document_files",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794484416959,
+      "tag": "0005_calendar_events",
+      "breakpoints": true
     }
   ]
 }

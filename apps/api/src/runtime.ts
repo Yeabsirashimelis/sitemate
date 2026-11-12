@@ -15,6 +15,7 @@ import { openDatabase, type DatabaseHandle } from "./db/client.js";
 import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
+import { registerCalendarFeature } from "./features/calendar.js";
 import { registerClaimsFeature } from "./features/claims.js";
 import { registerCostFeature } from "./features/cost.js";
 import { registerDocumentsFeature } from "./features/documents.js";
@@ -25,6 +26,7 @@ import { registerScheduleFeature } from "./features/schedule.js";
 import { registerSiteFeature } from "./features/site.js";
 import { registerWeatherFeature } from "./features/weather.js";
 import { OpenExchangeRates, type ExchangeRates } from "./integrations/fx.js";
+import { GoogleCalendar, loadServiceAccount, type CalendarProvider } from "./integrations/google-calendar.js";
 import { OpenMeteo, type WeatherProvider } from "./integrations/open-meteo.js";
 import type { FeatureDeps } from "./features/types.js";
 import { JobRunner } from "./jobs/queue.js";
@@ -43,6 +45,8 @@ export interface RuntimeOverrides {
   logger?: Logger;
   weather?: WeatherProvider;
   fx?: ExchangeRates;
+  /** null disables the calendar even when one is configured. */
+  calendar?: CalendarProvider | null;
   now?: () => Date;
 }
 
@@ -103,6 +107,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   const approvals = new ApprovalService(database.db, bot, {
     ownerApprovalThresholdEtb: config.OWNER_APPROVAL_THRESHOLD_ETB,
   });
+  const calendar = overrides.calendar !== undefined ? overrides.calendar : await openCalendar(config, logger);
   const deps: FeatureDeps = {
     config,
     db: database.db,
@@ -114,6 +119,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     approvals,
     weather: overrides.weather ?? new OpenMeteo(),
     fx: overrides.fx ?? new OpenExchangeRates(),
+    calendar,
     scheduler,
     now: overrides.now ?? (() => new Date()),
   };
@@ -127,6 +133,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerPlanningFeature(deps);
   registerDocumentsFeature(deps);
   registerClaimsFeature(deps);
+  registerCalendarFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 
@@ -171,4 +178,17 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
       await database.close();
     },
   };
+}
+
+/** Google Calendar when both the calendar id and the service account key are there. */
+async function openCalendar(config: Config, logger: Logger): Promise<CalendarProvider | null> {
+  if (!config.GOOGLE_CALENDAR_ID) return null;
+  try {
+    const account = await loadServiceAccount(config.GOOGLE_SERVICE_ACCOUNT_FILE);
+    logger.info({ calendar: config.GOOGLE_CALENDAR_ID.slice(0, 8) }, "google calendar sync on");
+    return new GoogleCalendar(account, config.GOOGLE_CALENDAR_ID);
+  } catch (error) {
+    logger.warn({ err: error, file: config.GOOGLE_SERVICE_ACCOUNT_FILE }, "google calendar is configured but the service account key could not be read, sync is off");
+    return null;
+  }
 }

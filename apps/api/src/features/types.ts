@@ -5,6 +5,7 @@ import type { Config } from "../config.js";
 import type { Database } from "../db/client.js";
 import type { EventBus } from "../events.js";
 import type { ExchangeRates } from "../integrations/fx.js";
+import type { CalendarProvider } from "../integrations/google-calendar.js";
 import type { WeatherProvider } from "../integrations/open-meteo.js";
 import type { JobRunner } from "../jobs/queue.js";
 import type { Scheduler } from "../scheduler.js";
@@ -22,6 +23,8 @@ export interface FeatureDeps {
   approvals: ApprovalService;
   weather: WeatherProvider;
   fx: ExchangeRates;
+  /** Google Calendar, or null when no calendar is configured. */
+  calendar: CalendarProvider | null;
   scheduler: Scheduler;
   /** Current time; replaced in tests. */
   now: () => Date;

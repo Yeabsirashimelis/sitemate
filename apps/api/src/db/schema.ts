@@ -871,3 +871,25 @@ export const documentFiles = pgTable("document_files", {
     .references(() => documents.id, { onDelete: "cascade" }),
   data: bytea("data").notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Google Calendar sync
+// ---------------------------------------------------------------------------
+
+/** One event SiteMate keeps on the company calendar, so a sync only touches what changed. */
+export const calendarEvents = pgTable(
+  "calendar_events",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** What the event stands for, e.g. "activity:B2100" or "rfi:<id>". */
+    key: text("key").notNull(),
+    googleEventId: text("google_event_id").notNull(),
+    /** Hash of the event body last sent, to skip unchanged events. */
+    contentHash: text("content_hash").notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("calendar_events_project_key").on(t.projectId, t.key)],
+);
