@@ -1,9 +1,22 @@
 import { buildApp } from "./app.js";
 import { loadConfig, loadEnvFile } from "./config.js";
+import { openDatabase } from "./db/client.js";
 
 loadEnvFile();
 const config = loadConfig();
-const app = await buildApp({ config });
+
+const database = await openDatabase({
+  url: config.DATABASE_URL,
+  pgliteDir: config.DATABASE_URL ? undefined : config.PGLITE_DIR,
+});
+await database.migrate();
+
+const app = await buildApp({
+  config,
+  readinessChecks: [{ name: "database", check: database.ping }],
+});
+app.addHook("onClose", () => database.close());
+app.log.info({ database: database.kind }, "Database ready");
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, "Shutting down");
