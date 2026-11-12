@@ -43,6 +43,22 @@ describe("computeSchedule", () => {
     for (const activity of result.activities.values()) expect(activity.totalFloat).toBe(0);
   });
 
+  it("holds an activity until its start-no-earlier-than date", () => {
+    const moved = textbook.map((a): Activity => (a.id === "F" ? { ...a, startNoEarlierThan: "2026-01-20" } : a));
+    const result = computeSchedule(moved, everyDay);
+    const get = (id: string) => result.activities.get(id)!;
+
+    expect(get("F")).toMatchObject({ earlyStart: 15, earlyFinish: 17, startDate: "2026-01-20" });
+    expect(result.projectFinish).toBe(17);
+    // The constraint now drives the finish, so the columns gain three days of float.
+    expect(get("D").totalFloat).toBe(3);
+    expect(result.criticalPath).toEqual(["F"]);
+
+    // A date that is already past has no effect.
+    const past = textbook.map((a): Activity => (a.id === "F" ? { ...a, startNoEarlierThan: "2026-01-06" } : a));
+    expect(computeSchedule(past, everyDay).projectFinish).toBe(14);
+  });
+
   it("schedules remaining work from the data date", () => {
     const progressed = textbook.map((a): Activity => {
       if (a.id === "A") return { ...a, actualStart: "2026-01-05", actualFinish: "2026-01-07" };

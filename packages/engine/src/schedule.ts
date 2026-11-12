@@ -30,6 +30,11 @@ export interface Activity {
   /** Planned duration in workdays. 0 = milestone. */
   duration: number;
   predecessors?: readonly Link[];
+  /**
+   * The activity may not start before this date, e.g. a pour moved past a
+   * rainy day or work waiting for a permit. Ignored once the activity has started.
+   */
+  startNoEarlierThan?: IsoDate;
   /** Progress, filled from the daily logs. */
   actualStart?: IsoDate;
   actualFinish?: IsoDate;
@@ -266,6 +271,7 @@ export function computeSchedule(
     }
 
     let es = dataDay;
+    if (activity.startNoEarlierThan) es = Math.max(es, calendar.indexOf(activity.startNoEarlierThan));
     for (const edge of incoming.get(id)!) {
       es = Math.max(es, earliestStartFromLink(edge, early.get(edge.from)!, activity.duration));
     }
