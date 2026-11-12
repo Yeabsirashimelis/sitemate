@@ -6,6 +6,7 @@ import type { Database } from "../db/client.js";
 import type { EventBus } from "../events.js";
 import type { WeatherProvider } from "../integrations/open-meteo.js";
 import type { JobRunner } from "../jobs/queue.js";
+import type { Scheduler } from "../scheduler.js";
 import type { TelegramBot } from "../telegram/bot.js";
 
 /** What every feature module gets when it registers its handlers and jobs. */
@@ -19,6 +20,7 @@ export interface FeatureDeps {
   bot: TelegramBot | null;
   approvals: ApprovalService;
   weather: WeatherProvider;
+  scheduler: Scheduler;
   /** Current time; replaced in tests. */
   now: () => Date;
 }

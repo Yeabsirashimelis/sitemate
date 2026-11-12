@@ -22,6 +22,8 @@ import { OpenMeteo, type WeatherProvider } from "./integrations/open-meteo.js";
 import type { FeatureDeps } from "./features/types.js";
 import { JobRunner } from "./jobs/queue.js";
 import { createLogger } from "./logger.js";
+import { deleteExpiredSessions } from "./auth/sessions.js";
+import { Scheduler } from "./scheduler.js";
 import { HttpTelegramApi, type TelegramApi } from "./telegram/api.js";
 import { TELEGRAM_UPDATE_JOB, TelegramBot } from "./telegram/bot.js";
 import { TelegramPoller } from "./telegram/poller.js";
@@ -44,6 +46,7 @@ export interface Runtime {
   bot: TelegramBot | null;
   llm: LlmClient;
   events: EventBus;
+  scheduler: Scheduler;
   /** Dependencies handed to feature modules, also used by scheduled jobs and tests. */
   deps: FeatureDeps;
   app: FastifyInstance;
@@ -87,6 +90,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   }
 
   const events = new EventBus(runner);
+  const scheduler = new Scheduler(runner, logger);
   const approvals = new ApprovalService(database.db, bot, {
     ownerApprovalThresholdEtb: config.OWNER_APPROVAL_THRESHOLD_ETB,
   });
@@ -100,12 +104,15 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     bot,
     approvals,
     weather: overrides.weather ?? new OpenMeteo(),
+    scheduler,
     now: overrides.now ?? (() => new Date()),
   };
   registerNotifyFeature(deps);
   registerSiteFeature(deps);
   registerScheduleFeature(deps);
   registerWeatherFeature(deps);
+  scheduler.add("approvals.expire", () => approvals.expireOld());
+  scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 
   const app = await buildApp({
     config,
@@ -113,7 +120,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     db: database.db,
     readinessChecks: [{ name: "database", check: database.ping }],
     onTelegramUpdate: () => runner.poke(),
-    services: { approvals },
+    services: { approvals, scheduler },
   });
 
   const poller =
@@ -129,6 +136,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     bot,
     llm,
     events,
+    scheduler,
     deps,
     app,
     start: async () => {
@@ -137,9 +145,11 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
       }
       poller?.start();
       runner.start();
+      if (config.NODE_ENV !== "test") scheduler.start();
     },
     stop: async () => {
       await poller?.stop();
+      await scheduler.stop();
       await runner.stop();
       await app.close();
       await database.close();

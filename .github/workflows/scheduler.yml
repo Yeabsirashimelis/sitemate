@@ -1,0 +1,27 @@
+# Wakes the API on Render's free plan and runs scheduled work: evening
+# check-ins, the morning weather check, weekly planning and clean-up.
+# Every hook is idempotent, so a late or repeated run is harmless.
+name: Scheduler
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the tick endpoint
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          JOBS_SECRET: ${{ secrets.JOBS_SECRET }}
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$JOBS_SECRET" ]; then
+            echo "API_URL and JOBS_SECRET are not set, skipping"
+            exit 0
+          fi
+          # A sleeping free instance can take about a minute to start.
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 --max-time 120 \
+            -X POST "$API_URL/jobs/tick" -H "x-jobs-secret: $JOBS_SECRET"

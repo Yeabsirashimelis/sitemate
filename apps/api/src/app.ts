@@ -9,6 +9,8 @@ import { registerErrorHandler } from "./http/errors.js";
 import { createLogger } from "./logger.js";
 import type { ApprovalService } from "./approvals/service.js";
 import { approvalRoutes } from "./routes/approvals.js";
+import { jobRoutes } from "./routes/jobs.js";
+import type { Scheduler } from "./scheduler.js";
 import { authRoutes } from "./routes/auth.js";
 import { projectRoutes } from "./routes/projects.js";
 import { scheduleRoutes } from "./routes/schedule.js";
@@ -30,6 +32,7 @@ export interface AppOptions {
 
 export interface AppServices {
   approvals: ApprovalService;
+  scheduler: Scheduler;
 }
 
 export async function buildApp({
@@ -84,6 +87,7 @@ export async function buildApp({
     telegramRoutes(app, db, config, onTelegramUpdate);
     if (services) {
       approvalRoutes(app, db, services.approvals);
+      jobRoutes(app, config, services.scheduler);
     }
   }
 

@@ -39,6 +39,8 @@ const REPORTING_ROLES = new Set(["supervisor", "site_engineer"]);
 export function registerSiteFeature(deps: FeatureDeps): void {
   const { db, bot, runner, config } = deps;
 
+  deps.scheduler.add("site.check-ins", () => queueDueCheckIns(deps));
+
   bot?.onMessage(async ({ user, project, message }) => {
     if (!project || !REPORTING_ROLES.has(user.role)) return false;
     if (!["text", "voice", "photo"].includes(message.kind)) return false;

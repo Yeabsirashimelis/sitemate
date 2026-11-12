@@ -29,6 +29,7 @@ const HORIZON_DAYS = 4;
 const MORNING_CHECK_MINUTES = 6 * 60 + 30;
 
 export function registerWeatherFeature(deps: FeatureDeps): void {
+  deps.scheduler.add("weather.morning-check", () => queueMorningWeatherChecks(deps));
   deps.runner.register(WEATHER_CHECK_JOB, {
     schema: z.object({ projectId: z.uuid() }),
     handle: async ({ projectId }) => {
