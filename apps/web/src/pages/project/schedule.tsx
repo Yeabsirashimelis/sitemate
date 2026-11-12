@@ -3,7 +3,9 @@ import { FlaskConical } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Gantt } from "../../components/gantt";
 import { Button, Code, Empty, ErrorNote, Field, Input, Loading, Panel, Section, Select, Status, Table, Td, Th, cx } from "../../components/ui";
-import { api } from "../../lib/api";
+import { ScheduleImport } from "../../components/project-setup";
+import { ApiError, api } from "../../lib/api";
+import { useCan } from "../../lib/auth";
 import { birr, dayDate, longDate, number, plural, relativeTime } from "../../lib/format";
 import { useMeasures, useSchedule } from "../../lib/queries";
 import type { WhatIfResult } from "../../lib/types";
@@ -161,10 +163,14 @@ export function ScheduleTab() {
   const [view, setView] = useState<"chart" | "table">("chart");
   const [whatIf, setWhatIf] = useState<WhatIfResult | null>(null);
 
+  const can = useCan();
+
   if (isLoading) return <Loading />;
-  if (error) return <ErrorNote error={error} />;
+  const missing = error instanceof ApiError && error.status === 404;
+  if (error && !missing) return <ErrorNote error={error} />;
   const schedule = data?.schedule;
-  if (!schedule) return <Empty title="No schedule yet">Import the schedule from Excel or MS Project as CSV to start.</Empty>;
+  if (!schedule)
+    return can.manage ? <ScheduleImport projectId={project.id} /> : <Empty title="No schedule yet">The project manager imports it from Excel or MS Project as CSV.</Empty>;
 
   const open = schedule.activities.filter((a) => a.status !== "complete" && a.duration > 0);
   const counts = {

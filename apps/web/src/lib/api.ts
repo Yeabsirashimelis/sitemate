@@ -41,18 +41,19 @@ export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;
 }
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown; raw?: boolean } = {}): Promise<T> {
+export async function api<T>(path: string, init: { method?: string; body?: unknown; raw?: boolean; csv?: string } = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {};
   if (token) headers.authorization = `Bearer ${token}`;
   if (init.body !== undefined) headers["content-type"] = "application/json";
+  if (init.csv !== undefined) headers["content-type"] = "text/csv";
 
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
       headers,
-      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : init.csv !== undefined ? { body: init.csv } : {}),
     });
   } catch {
     throw new ApiError(0, "network", "Cannot reach the SiteMate server. Check your connection.");

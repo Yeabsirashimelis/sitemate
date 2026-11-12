@@ -1,7 +1,11 @@
-import { ArrowUpRight, CloudRain } from "lucide-react";
-import { Link } from "react-router";
-import { Code, Empty, ErrorNote, Loading, PageHeader, Status, cx } from "../components/ui";
-import { useAuth } from "../lib/auth";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowUpRight, CloudRain, FolderPlus, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { NewProjectDialog, downloadSampleCsv } from "../components/project-setup";
+import { Button, Code, ErrorNote, Loading, PageHeader, Status, cx } from "../components/ui";
+import { api } from "../lib/api";
+import { useAuth, useCan } from "../lib/auth";
 import { birrCompact, dayDate, longDate, number, perfIndex, slipText } from "../lib/format";
 import { usePortfolio } from "../lib/queries";
 import { indexTone, slipTone } from "../lib/status";
@@ -101,8 +105,63 @@ function ProjectRow({ card }: { card: PortfolioCard }) {
   );
 }
 
+/** First run: no projects yet. Two ways in, side by side. */
+function GettingStarted({ onNewProject }: { onNewProject: () => void }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const can = useCan();
+  const sample = useMutation({
+    mutationFn: () => api<{ projectId: string }>("/projects/sample", { method: "POST" }),
+    onSuccess: ({ projectId }) => {
+      void queryClient.invalidateQueries();
+      navigate(`/projects/${projectId}`);
+    },
+  });
+
+  if (!can.manage) {
+    return <p className="py-6 text-[14px] text-ink-2">You have not been added to a project yet. Ask your project manager to add you.</p>;
+  }
+
+  return (
+    <div className="grid gap-4 py-2 md:grid-cols-2">
+      <section className="flex flex-col rounded-[6px] border border-rule bg-surface p-6">
+        <Sparkles className="size-5 text-ink-3" aria-hidden />
+        <h2 className="mt-3 text-[16px] font-semibold">Start with a sample project</h2>
+        <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-ink-2">
+          A G+4 apartment block in Bole, seven weeks in: 59 activities, daily site reports, stock and deliveries, costs, a contract and a specification.
+          The quickest way to see what SiteMate does. Takes a few seconds to build.
+        </p>
+        <div className="mt-5">
+          <Button variant="primary" busy={sample.isPending} onClick={() => sample.mutate()}>
+            Create the sample project
+          </Button>
+        </div>
+        <div className="mt-3">
+          <ErrorNote error={sample.error} />
+        </div>
+      </section>
+      <section className="flex flex-col rounded-[6px] border border-rule bg-surface p-6">
+        <FolderPlus className="size-5 text-ink-3" aria-hidden />
+        <h2 className="mt-3 text-[16px] font-semibold">Set up your own project</h2>
+        <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-ink-2">
+          Name, site, contract dates and working days, then the schedule as a CSV from Excel or MS Project. After that, invite your site supervisors to
+          Telegram from the Team page.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <Button onClick={onNewProject}>New project</Button>
+          <button type="button" onClick={downloadSampleCsv} className="text-[12px] font-medium text-ink-2 underline underline-offset-2 hover:text-ink">
+            Download a sample schedule
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function PortfolioPage() {
   const { session } = useAuth();
+  const can = useCan();
+  const [creating, setCreating] = useState(false);
   const { data, isLoading, error } = usePortfolio();
   const projects = data?.projects ?? [];
   const late = projects.filter((p) => (p.slipDays ?? 0) > 0).length;
@@ -116,19 +175,25 @@ export function PortfolioPage() {
         meta={
           projects.length
             ? `${projects.length} active project${projects.length > 1 ? "s" : ""}. ${late ? `${late} forecast to finish late.` : "All on or ahead of the contract date."} ${waiting ? `${waiting} decision${waiting > 1 ? "s" : ""} waiting for you.` : ""}`
-            : undefined
+            : "Your projects will appear here."
+        }
+        actions={
+          can.manage && projects.length ? (
+            <Button icon={<FolderPlus className="size-4" />} onClick={() => setCreating(true)}>
+              New project
+            </Button>
+          ) : null
         }
       />
       <ErrorNote error={error} />
       {isLoading ? <Loading /> : null}
-      {!isLoading && projects.length === 0 && !error ? (
-        <Empty title="No projects yet">Create a project and import its schedule to start. Supervisors then report from site on Telegram.</Empty>
-      ) : null}
+      {!isLoading && projects.length === 0 && !error ? <GettingStarted onNewProject={() => setCreating(true)} /> : null}
       <div>
         {projects.map((card) => (
           <ProjectRow key={card.id} card={card} />
         ))}
       </div>
+      <NewProjectDialog open={creating} onClose={() => setCreating(false)} />
     </div>
   );
 }
