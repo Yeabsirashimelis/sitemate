@@ -4,7 +4,7 @@ import { z } from "zod";
 import { DASHBOARD_ROLES, MANAGER_ROLES } from "../auth/permissions.js";
 import { audit } from "../audit.js";
 import type { Database } from "../db/client.js";
-import { activityKind, materials, materialTransactions, purchaseRequests, quotes, suppliers, users } from "../db/schema.js";
+import { activityKind, approvals, auditLog, materials, materialTransactions, purchaseRequests, quotes, suppliers, users } from "../db/schema.js";
 import { requireRole } from "../http/auth.js";
 import { conflict, notFound } from "../http/errors.js";
 import { getAccessibleProject } from "../services/access.js";
@@ -175,15 +175,44 @@ export function materialRoutes(app: FastifyInstance, db: Database): void {
             ),
           )
       : [];
+    // The decision each request is waiting on, so the dashboard can offer it in place.
+    const pending = await db
+      .select()
+      .from(approvals)
+      .where(and(eq(approvals.projectId, projectId), eq(approvals.status, "pending")));
+    const pendingFor = (requestId: string) => pending.find((a) => a.action.purchaseRequestId === requestId) ?? null;
+    const asked = rows.length
+      ? await db
+          .select({ subjectId: auditLog.subjectId, data: auditLog.data })
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.action, "procurement.quotes_requested"),
+              inArray(
+                auditLog.subjectId,
+                rows.map((r) => r.request.id),
+              ),
+            ),
+          )
+      : [];
+
     return {
-      purchaseRequests: rows.map((r) => ({
-        ...r.request,
-        material: { id: r.material.id, name: r.material.name, unit: r.material.unit },
-        quotes: allQuotes
-          .filter((q) => q.quote.purchaseRequestId === r.request.id)
-          .map((q) => ({ ...q.quote, supplierName: q.supplierName }))
-          .sort((a, b) => a.unitPriceEtb - b.unitPriceEtb),
-      })),
+      purchaseRequests: rows.map((r) => {
+        const approval = pendingFor(r.request.id);
+        const supplierIds = (asked.find((a) => a.subjectId === r.request.id)?.data as { supplierIds?: string[] } | null)?.supplierIds;
+        return {
+          ...r.request,
+          material: { id: r.material.id, name: r.material.name, unit: r.material.unit },
+          quotes: allQuotes
+            .filter((q) => q.quote.purchaseRequestId === r.request.id)
+            .map((q) => ({ ...q.quote, supplierName: q.supplierName }))
+            .sort((a, b) => a.unitPriceEtb - b.unitPriceEtb),
+          suppliersAsked: supplierIds?.length ?? null,
+          approval: approval
+            ? { id: approval.id, title: approval.title, approverRole: approval.approverRole, step: approval.action.type === "procurement.place_order" ? "order" : "quotes" }
+            : null,
+        };
+      }),
     };
   });
 

@@ -263,7 +263,7 @@ export async function compareQuotes(deps: FeatureDeps, purchaseRequestId: string
       ...lines,
     ].join("\n"),
     action: { type: PLACE_ORDER, purchaseRequestId, quoteId: best.quote.id },
-    evidence: [{ label: `Quotes received on Telegram for ${reference(request.id)}` }],
+    evidence: [{ label: `Quotes received for ${reference(request.id)}` }],
     requestedBy: QUOTE_AGENT,
     amountEtb: total,
   });
@@ -304,4 +304,52 @@ export async function matchDeliveries(deps: FeatureDeps, dailyLogId: string): Pr
     matched++;
   }
   return matched;
+}
+
+/**
+ * A price the project manager got by phone or in person. Stored like a reply
+ * on Telegram, then compared the same way.
+ */
+export async function recordQuote(
+  deps: FeatureDeps,
+  input: { purchaseRequestId: string; supplierId: string; unitPrice: number; currency: string; leadTimeDays: number; note?: string | undefined; userId: string; companyId: string },
+) {
+  const { db } = deps;
+  const [row] = await db
+    .select({ request: purchaseRequests, material: materials, project: projects })
+    .from(purchaseRequests)
+    .innerJoin(materials, eq(materials.id, purchaseRequests.materialId))
+    .innerJoin(projects, eq(projects.id, purchaseRequests.projectId))
+    .where(and(eq(purchaseRequests.id, input.purchaseRequestId), eq(projects.companyId, input.companyId)));
+  if (!row) return { error: "not_found" as const };
+  if (row.request.status !== "approved") return { error: "closed" as const, status: row.request.status };
+  const [supplier] = await db
+    .select()
+    .from(suppliers)
+    .where(and(eq(suppliers.id, input.supplierId), eq(suppliers.companyId, input.companyId)));
+  if (!supplier) return { error: "unknown_supplier" as const };
+
+  const unitPriceEtb = await deps.fx.toEtb(input.unitPrice, input.currency);
+  await db.transaction(async (tx) => {
+    await tx.delete(quotes).where(and(eq(quotes.purchaseRequestId, row.request.id), eq(quotes.supplierId, supplier.id)));
+    await tx.insert(quotes).values({
+      purchaseRequestId: row.request.id,
+      supplierId: supplier.id,
+      unitPrice: input.unitPrice,
+      currency: input.currency.toUpperCase(),
+      unitPriceEtb,
+      leadTimeDays: input.leadTimeDays,
+      note: input.note ?? null,
+    });
+    await audit(tx, {
+      companyId: input.companyId,
+      projectId: row.project.id,
+      actor: { type: "user", id: input.userId },
+      action: "procurement.quote_received",
+      subject: { type: "purchase_request", id: row.request.id },
+      reason: `${supplier.name}: ${input.unitPrice} ${input.currency.toUpperCase()} per ${row.material.unit}, entered by hand`,
+    });
+  });
+  const proposed = await compareQuotes(deps, row.request.id, { onlyWhenAllAnswered: true });
+  return { error: null, proposed };
 }
