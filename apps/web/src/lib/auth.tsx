@@ -12,6 +12,7 @@ interface AuthState {
   session: Session | null;
   loading: boolean;
   signIn(email: string, password: string): Promise<void>;
+  signUp(input: { companyName: string; name: string; email: string; password: string }): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -40,6 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession({ user: result.user, company: result.company });
   }, []);
 
+  const signUp = useCallback(async (input: { companyName: string; name: string; email: string; password: string }) => {
+    const result = await api<Session & { token: string }>("/auth/register", { body: input });
+    setToken(result.token);
+    setSession({ user: result.user, company: result.company });
+  }, []);
+
   const signOut = useCallback(async () => {
     await api("/auth/logout", { method: "POST" }).catch(() => undefined);
     setToken(null);
@@ -47,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
   }, [queryClient]);
 
-  const value = useMemo(() => ({ session, loading, signIn, signOut }), [session, loading, signIn, signOut]);
+  const value = useMemo(() => ({ session, loading, signIn, signUp, signOut }), [session, loading, signIn, signUp, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

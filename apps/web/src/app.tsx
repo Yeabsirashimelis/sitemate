@@ -5,6 +5,7 @@ import { Loading } from "./components/ui";
 import { useAuth } from "./lib/auth";
 import { ApprovalsPage } from "./pages/approvals";
 import { LoginPage } from "./pages/login";
+import { SignupPage } from "./pages/signup";
 import { NotFoundPage } from "./pages/not-found";
 import { PortfolioPage } from "./pages/portfolio";
 import { ActivityTab } from "./pages/project/activity";
@@ -29,6 +30,7 @@ function RequireSession({ children }: { children: ReactNode }) {
 
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+  { path: "/signup", element: <SignupPage /> },
   {
     path: "/",
     element: (
