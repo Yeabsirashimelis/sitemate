@@ -78,6 +78,34 @@ describe("GeminiClient.generate", () => {
   });
 });
 
+describe("fallback model", () => {
+  it("moves to the fallback model when the main one stays overloaded", async () => {
+    generateContent.mockImplementation(async ({ model }: { model: string }) => {
+      if (model === "gemini-test") throw new ApiError({ message: "high demand", status: 503 });
+      return reply('{"summary":"from the fallback","workers":5}');
+    });
+    const withFallback = new GeminiClient({
+      apiKey: "k",
+      model: "gemini-test",
+      fallbackModel: "gemini-lite",
+      embeddingModel: "emb",
+      embeddingDimensions: 3,
+      retryDelayMs: 1,
+      maxAttempts: 2,
+    });
+    const result = await withFallback.generate({ system: "s", parts: [{ text: "x" }], schema });
+    expect(result).toMatchObject({ model: "gemini-lite", value: { workers: 5 } });
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["gemini-test", "gemini-test", "gemini-lite"]);
+  });
+
+  it("does not hide a bad request behind the fallback", async () => {
+    generateContent.mockRejectedValue(new ApiError({ message: "bad schema", status: 400 }));
+    const withFallback = new GeminiClient({ apiKey: "k", model: "a", fallbackModel: "b", embeddingModel: "e", embeddingDimensions: 3, retryDelayMs: 1 });
+    await expect(withFallback.generate({ system: "s", parts: [{ text: "x" }], schema })).rejects.toMatchObject({ retryable: false });
+    expect(generateContent).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("GeminiClient.embed", () => {
   it("batches by 100 and returns unit vectors", async () => {
     embedContent.mockImplementation(async ({ contents }: { contents: string[] }) => ({

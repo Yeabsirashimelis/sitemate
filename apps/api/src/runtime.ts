@@ -78,6 +78,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
       ? new GeminiClient({
           apiKey: config.GEMINI_API_KEY,
           model: config.GEMINI_MODEL,
+          fallbackModel: config.GEMINI_FALLBACK_MODEL || undefined,
           embeddingModel: config.GEMINI_EMBEDDING_MODEL,
           embeddingDimensions: EMBEDDING_DIMENSIONS,
         })

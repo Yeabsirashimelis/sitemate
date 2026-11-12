@@ -27,6 +27,8 @@ const schema = z.object({
 
   GEMINI_API_KEY: optional,
   GEMINI_MODEL: z.string().default("gemini-3.8-flash"),
+  /** Used when the main model is overloaded. Empty to turn off. */
+  GEMINI_FALLBACK_MODEL: z.string().default("gemini-3.5-flash-lite"),
   GEMINI_EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
 
   TELEGRAM_BOT_TOKEN: optional,

@@ -81,6 +81,8 @@ export interface GeminiOptions {
   maxAttempts?: number;
   /** First retry delay; doubles each time. */
   retryDelayMs?: number;
+  /** Used when the main model stays overloaded or rate limited. */
+  fallbackModel?: string | undefined;
 }
 
 export class GeminiClient implements LlmClient {
@@ -109,14 +111,28 @@ export class GeminiClient implements LlmClient {
     }
   }
 
+  /**
+   * Uses the main model, and the fallback model when the main one is still
+   * overloaded or rate limited after its retries.
+   */
   async generate<T>(request: GenerateRequest<T>): Promise<GenerateResult<T>> {
+    try {
+      return await this.generateWith(this.model, request);
+    } catch (error) {
+      const fallback = this.options.fallbackModel;
+      if (!fallback || fallback === this.model || !(error instanceof LlmError) || !error.retryable) throw error;
+      return this.generateWith(fallback, request);
+    }
+  }
+
+  private async generateWith<T>(model: string, request: GenerateRequest<T>): Promise<GenerateResult<T>> {
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let parts = request.parts;
 
     for (let round = 1; round <= 2; round++) {
       const response = await this.withRetry(() =>
         this.ai.models.generateContent({
-          model: this.model,
+          model,
           contents: [{ role: "user", parts }],
           config: {
             systemInstruction: request.system,
@@ -137,7 +153,7 @@ export class GeminiClient implements LlmClient {
         parsed = undefined;
       }
       const result = request.schema.safeParse(parsed);
-      if (result.success) return { value: result.data, usage, model: this.model };
+      if (result.success) return { value: result.data, usage, model };
 
       const problems = result.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
       if (round === 2) throw new LlmError(`Model output did not match the schema: ${problems}`, false);
