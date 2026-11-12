@@ -29,7 +29,8 @@ export async function createTestApp(env: Record<string, string> = {}, options: {
     telegramApi: telegram,
     llm,
     ...(options.now ? { now: options.now } : {}),
-    ...(options.weather ? { weather: options.weather } : {}),
+    // Tests never reach Open-Meteo; a quiet forecast unless a test brings its own.
+    weather: options.weather ?? { forecast: async () => [] },
     // Tests never reach the real Google Calendar.
     calendar: options.calendar ?? null,
     fx: options.fx ?? { toEtb: async (amount: number, currency: string) => (currency.toUpperCase() === "USD" ? amount * 160 : amount) },
