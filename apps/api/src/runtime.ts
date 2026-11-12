@@ -15,6 +15,7 @@ import { openDatabase, type DatabaseHandle } from "./db/client.js";
 import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
+import { registerProcurementFeature } from "./features/procurement.js";
 import { registerScheduleFeature } from "./features/schedule.js";
 import { registerSiteFeature } from "./features/site.js";
 import { registerWeatherFeature } from "./features/weather.js";
@@ -111,6 +112,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerSiteFeature(deps);
   registerScheduleFeature(deps);
   registerWeatherFeature(deps);
+  registerProcurementFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 
