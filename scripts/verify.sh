@@ -4,5 +4,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+pnpm --filter @sitemate/engine build
 pnpm -r typecheck
 pnpm -r test
