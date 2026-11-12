@@ -29,7 +29,7 @@ import { OpenExchangeRates, type ExchangeRates } from "./integrations/fx.js";
 import { GoogleCalendar, loadServiceAccount, type CalendarProvider } from "./integrations/google-calendar.js";
 import { OpenMeteo, type WeatherProvider } from "./integrations/open-meteo.js";
 import type { FeatureDeps } from "./features/types.js";
-import { JobRunner } from "./jobs/queue.js";
+import { JOB_TIME_LIMIT_MS, JobRunner, releaseStaleJobs } from "./jobs/queue.js";
 import { createLogger } from "./logger.js";
 import { deleteExpiredSessions } from "./auth/sessions.js";
 import { Scheduler } from "./scheduler.js";
@@ -136,6 +136,8 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerCalendarFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
+  // Jobs left "running" by a worker that crashed or was stopped mid-job.
+  scheduler.add("jobs.release-stale", () => releaseStaleJobs(database.db, 2 * JOB_TIME_LIMIT_MS));
 
   const app = await buildApp({
     config,

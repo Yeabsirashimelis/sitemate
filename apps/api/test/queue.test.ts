@@ -98,6 +98,20 @@ describe("JobRunner", () => {
     expect(failed.map((r) => r.lastError).join(" ")).toMatch(/ZodError|negative/);
   });
 
+  it("gives up on a job that hangs so the jobs behind it still run", async () => {
+    const done: string[] = [];
+    const runner = new JobRunner(handle.db, silent, "worker-test", 50)
+      .register("hang", { schema: z.object({}), handle: () => new Promise<void>(() => undefined) })
+      .register("quick", { schema: z.object({}), handle: async () => void done.push("quick") });
+    const hung = await enqueue(handle.db, "hang", {});
+    await enqueue(handle.db, "quick", {});
+
+    expect(await runner.drain()).toBe(2);
+    expect(done).toEqual(["quick"]);
+    const [row] = await handle.db.select().from(jobs).where(eq(jobs.id, hung!));
+    expect(row).toMatchObject({ status: "pending", lastError: "Error: Job took longer than 0.05 s" });
+  });
+
   it("leaves job types it does not handle for other runners", async () => {
     await enqueue(handle.db, "other", {});
     const runner = new JobRunner(handle.db, silent).register("mine", { schema: z.object({}), handle: async () => {} });

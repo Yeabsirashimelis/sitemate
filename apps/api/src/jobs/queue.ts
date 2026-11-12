@@ -115,6 +115,9 @@ export async function failJob(
   return exhausted ? "failed" : "pending";
 }
 
+/** Longest a single job may run before it is failed and retried. */
+export const JOB_TIME_LIMIT_MS = 3 * 60_000;
+
 /** Puts back jobs whose worker died while holding them. */
 export async function releaseStaleJobs(db: Executor, olderThanMs: number, now = new Date()): Promise<number> {
   const released = await db
@@ -155,6 +158,7 @@ export class JobRunner {
     private readonly db: Executor,
     private readonly logger: Logger,
     private readonly workerId = `worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`,
+    private readonly timeLimitMs = JOB_TIME_LIMIT_MS,
   ) {}
 
   register<S extends z.ZodType>(type: string, definition: JobDefinition<S>): this {
@@ -174,7 +178,16 @@ export class JobRunner {
     try {
       if (!definition) throw new Error(`No handler for job type "${job.type}"`);
       const payload = definition.schema.parse(job.payload);
-      await definition.handle(payload, { job, db: this.db });
+      // One hung call must not hold up every job behind it.
+      let timer: NodeJS.Timeout | undefined;
+      const limit = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Job took longer than ${this.timeLimitMs / 1000} s`)), this.timeLimitMs);
+      });
+      try {
+        await Promise.race([definition.handle(payload, { job, db: this.db }), limit]);
+      } finally {
+        clearTimeout(timer);
+      }
       await completeJob(this.db, job.id);
       this.logger.info({ jobId: job.id, type: job.type, ms: Date.now() - started }, "Job done");
     } catch (error) {

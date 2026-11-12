@@ -81,6 +81,8 @@ export interface GeminiOptions {
   maxAttempts?: number;
   /** First retry delay; doubles each time. */
   retryDelayMs?: number;
+  /** Per request, in milliseconds. */
+  timeoutMs?: number;
   /** Used when the main model stays overloaded or rate limited. */
   fallbackModel?: string | undefined;
 }
@@ -91,7 +93,8 @@ export class GeminiClient implements LlmClient {
 
   constructor(private readonly options: GeminiOptions) {
     this.model = options.model;
-    this.ai = new GoogleGenAI({ apiKey: options.apiKey });
+    // Without a limit a stalled request waits forever and holds up the job queue.
+    this.ai = new GoogleGenAI({ apiKey: options.apiKey, httpOptions: { timeout: options.timeoutMs ?? 45_000 } });
   }
 
   private async withRetry<T>(call: () => Promise<T>): Promise<T> {
@@ -101,7 +104,8 @@ export class GeminiClient implements LlmClient {
         return await call();
       } catch (error) {
         const status = error instanceof ApiError ? error.status : undefined;
-        const retryable = status === 429 || (status !== undefined && status >= 500);
+        const timedOut = error instanceof Error && /abort|timed? ?out/i.test(`${error.name} ${error.message}`);
+        const retryable = status === 429 || (status !== undefined && status >= 500) || timedOut;
         if (!retryable || attempt >= attempts) {
           throw new LlmError(error instanceof Error ? error.message : String(error), retryable);
         }
