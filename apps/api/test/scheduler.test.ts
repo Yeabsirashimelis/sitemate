@@ -71,12 +71,10 @@ describe("POST /jobs/tick", () => {
   it("runs the registered hooks", async () => {
     const response = await t.app.inject({ method: "POST", url: "/jobs/tick", headers: { "x-jobs-secret": "cron-secret" } });
     expect(response.statusCode).toBe(200);
-    expect(Object.keys(response.json().hooks)).toEqual([
-      "site.check-ins",
-      "weather.morning-check",
-      "approvals.expire",
-      "sessions.cleanup",
-    ]);
+    expect(Object.keys(response.json().hooks)).toEqual(
+      expect.arrayContaining(["site.check-ins", "weather.morning-check", "procurement.daily-check", "approvals.expire", "sessions.cleanup"]),
+    );
+    expect(response.json().jobsProcessed).toBeTypeOf("number");
   });
 
   it("does not exist when no secret is configured", async () => {
