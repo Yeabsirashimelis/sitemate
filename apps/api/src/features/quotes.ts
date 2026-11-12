@@ -28,6 +28,7 @@ import {
 } from "../db/schema.js";
 import { birr, longDate, plural } from "../domain/format.js";
 import { EVENTS } from "../events.js";
+import { t } from "../i18n.js";
 import { projectCalendar } from "../services/schedule.js";
 import { notifyProject } from "./notify.js";
 import type { FeatureDeps } from "./types.js";
@@ -131,6 +132,8 @@ export async function handleSupplierReply(deps: FeatureDeps, userId: string, tex
     return "nothing_open";
   }
 
+  // Reading the price can take a while when the model is busy; acknowledge first.
+  await bot?.sendToUser(user, t("readingPrice", user.language));
   const { value } = await tracedGenerate(
     db,
     deps.llm,

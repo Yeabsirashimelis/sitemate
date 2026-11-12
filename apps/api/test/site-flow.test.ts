@@ -1,3 +1,4 @@
+import { t as say } from "../src/i18n.js";
 import { and, desc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -117,7 +118,8 @@ describe("daily site loop", () => {
     t.telegram.reset();
 
     await deliver(t, textUpdate(site.supervisor.telegramId, "ቁፋሮው ተጠናቋል"));
-    expect(t.telegram.textsTo(site.supervisor.telegramId)).toEqual(["ዛሬ ስንት ግንበኞች ነበሩ?"]);
+    // First the instant acknowledgement, then the question once the report has been read.
+    expect(t.telegram.textsTo(site.supervisor.telegramId)).toEqual([say("reading", "am"), "ዛሬ ስንት ግንበኞች ነበሩ?"]);
     expect(await logFor(site.projectId)).toMatchObject({ status: "awaiting_answer", followUpsAsked: 1 });
     expect(t.llm.requests[0]!.system).toMatch(/followUpQuestion in Amharic/);
 
@@ -191,7 +193,7 @@ describe("daily site loop", () => {
     t.telegram.reset();
     await deliver(t, textUpdate(site.supervisor.telegramId, "update"));
     const sent = t.telegram.textsTo(site.supervisor.telegramId);
-    expect(sent).toEqual(["Thank you. I could not process your update automatically, so I have passed it to your project manager."]);
+    expect(sent).toEqual([say("reading", "en"), "Thank you. I could not process your update automatically, so I have passed it to your project manager."]);
   });
 });
 

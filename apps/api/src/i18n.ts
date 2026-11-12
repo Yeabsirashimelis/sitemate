@@ -47,6 +47,26 @@ const messages = {
     en: () => "Thank you. I could not process your update automatically, so I have passed it to your project manager.",
     am: () => "አመሰግናለሁ። ሪፖርትዎን በራሴ ማስኬድ አልቻልኩም፣ ስለዚህ ለፕሮጀክት ማኔጀርዎ አስተላልፌዋለሁ።",
   },
+  reading: {
+    en: () => "Got it. I will read your report and send you a summary in a minute or two.",
+    am: () => "ደርሶኛል። ሪፖርትዎን አንብቤ በአንድ ወይም በሁለት ደቂቃ ውስጥ ማጠቃለያ እልክልዎታለሁ።",
+  },
+  readingPrice: {
+    en: () => "Thank you, I am reading your price now.",
+    am: () => "አመሰግናለሁ፣ ዋጋዎን አሁን እያነበብኩ ነው።",
+  },
+  rfiAnswered: {
+    en: (number: number) => `Thank you. Your answer to RFI ${number} is recorded and passed to the project team.`,
+    am: (number: number) => `አመሰግናለሁ። ለRFI ${number} የሰጡት መልስ ተመዝግቦ ለፕሮጀክቱ ቡድን ተላልፏል።`,
+  },
+  rfiWhich: {
+    en: (list: string) => `Which request is this answer for? Please send it again starting with the number, like "RFI 2: ...".\n\n${list}`,
+    am: (list: string) => `ይህ መልስ ለየትኛው ጥያቄ ነው? እባክዎ በቁጥሩ ጀምረው እንደገና ይላኩ፣ ለምሳሌ "RFI 2: ..."።\n\n${list}`,
+  },
+  rfiNoneOpen: {
+    en: () => "Thank you. There are no open requests for information waiting for you at the moment.",
+    am: () => "አመሰግናለሁ። በአሁኑ ጊዜ እርስዎን የሚጠብቅ ክፍት ጥያቄ የለም።",
+  },
 } as const;
 
 export type MessageKey = keyof typeof messages;

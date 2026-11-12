@@ -4,7 +4,7 @@
  * the log to the schedule and the stock.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { tracedGenerate } from "../ai/agent-run.js";
 import { LlmError, type Part } from "../ai/llm.js";
@@ -53,6 +53,16 @@ export function registerSiteFeature(deps: FeatureDeps): void {
       // Something added after the log was saved: reopen it and process again.
       await db.update(dailyLogs).set({ status: "collecting" }).where(eq(dailyLogs.id, log.id));
     }
+
+    // Say straight away that the report arrived; reading it can take a minute
+    // when the model is busy. Once per burst of messages, not for every photo.
+    const burstStart = new Date(deps.now().getTime() - config.SITE_BATCH_SECONDS * 1000);
+    const [earlier] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.dailyLogId, log.id), eq(messages.direction, "in"), ne(messages.id, message.id), gt(messages.createdAt, burstStart)))
+      .limit(1);
+    if (!earlier) await bot.sendToUser(user, t("reading", user.language), { projectId: project.id, dailyLogId: log.id });
 
     // Supervisors often send a few photos and a voice note in a row. Each
     // message schedules a job a little later, and only the job for the last

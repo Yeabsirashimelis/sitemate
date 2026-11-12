@@ -97,8 +97,7 @@ export class GeminiClient implements LlmClient {
     this.ai = new GoogleGenAI({ apiKey: options.apiKey, httpOptions: { timeout: options.timeoutMs ?? 45_000 } });
   }
 
-  private async withRetry<T>(call: () => Promise<T>): Promise<T> {
-    const attempts = this.options.maxAttempts ?? 4;
+  private async withRetry<T>(call: () => Promise<T>, attempts = this.options.maxAttempts ?? 4): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       try {
         return await call();
@@ -121,7 +120,8 @@ export class GeminiClient implements LlmClient {
    */
   async generate<T>(request: GenerateRequest<T>): Promise<GenerateResult<T>> {
     try {
-      return await this.generateWith(this.model, request);
+      // With a fallback ready, give up on an overloaded main model after two tries rather than four.
+      return await this.generateWith(this.model, request, this.options.fallbackModel ? 2 : undefined);
     } catch (error) {
       const fallback = this.options.fallbackModel;
       if (!fallback || fallback === this.model || !(error instanceof LlmError) || !error.retryable) throw error;
@@ -129,7 +129,7 @@ export class GeminiClient implements LlmClient {
     }
   }
 
-  private async generateWith<T>(model: string, request: GenerateRequest<T>): Promise<GenerateResult<T>> {
+  private async generateWith<T>(model: string, request: GenerateRequest<T>, attempts?: number): Promise<GenerateResult<T>> {
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let parts = request.parts;
 
@@ -145,6 +145,7 @@ export class GeminiClient implements LlmClient {
             temperature: request.temperature ?? 0.2,
           },
         }),
+        attempts,
       );
       usage.inputTokens += response.usageMetadata?.promptTokenCount ?? 0;
       usage.outputTokens += response.usageMetadata?.candidatesTokenCount ?? 0;
