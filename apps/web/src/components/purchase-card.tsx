@@ -137,6 +137,11 @@ export function PurchaseCard({ request: p }: { request: PurchaseRequest }) {
   const state = progress(p);
   const [recording, setRecording] = useState(false);
   const canRecord = can.manage && p.status === "approved" && p.approval?.step !== "order";
+  const queryClient = useQueryClient();
+  const reopen = useMutation({
+    mutationFn: () => api(`/purchase-requests/${p.id}/reopen`, { method: "POST" }),
+    onSettled: () => void queryClient.invalidateQueries(),
+  });
   const cost = p.quotes[0] ? p.quotes[0].unitPriceEtb * p.quantity : null;
 
   return (
@@ -179,6 +184,22 @@ export function PurchaseCard({ request: p }: { request: PurchaseRequest }) {
             ))}
           </ul>
           {cost ? <p className="mt-2 text-[12px] text-ink-3">At the cheapest price the order comes to about {birr(cost)}.</p> : null}
+        </div>
+      ) : null}
+
+      {p.status === "cancelled" && can.manage ? (
+        <div className="flex flex-wrap items-center gap-3 border-t border-rule px-5 py-3">
+          <Button size="sm" busy={reopen.isPending} onClick={() => reopen.mutate()}>
+            Reopen
+          </Button>
+          <span className="text-[12px] text-ink-3">
+            {p.quotes.length ? "Turned down by mistake? Reopen to choose from the prices already received." : "Turned down by mistake? Reopen to decide again."}
+          </span>
+          {reopen.error ? (
+            <div className="w-full">
+              <ErrorNote error={reopen.error} />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

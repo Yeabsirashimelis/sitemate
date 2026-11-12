@@ -8,15 +8,16 @@
  */
 
 import { addCalendarDays } from "@sitemate/engine";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { audit } from "../audit.js";
-import { companies, projects, purchaseRequests, suppliers, users } from "../db/schema.js";
+import { approvals, companies, projects, purchaseRequests, quotes, suppliers, users } from "../db/schema.js";
 import { birr, longDate, plural } from "../domain/format.js";
 import { localDate } from "../domain/time.js";
 import { EVENTS } from "../events.js";
 import { enqueue } from "../jobs/queue.js";
 import { forecastMaterials, orderQuantity, type MaterialForecast } from "../services/materials.js";
+import { compareQuotes } from "./quotes.js";
 import type { FeatureDeps } from "./types.js";
 
 export const PROCUREMENT_AGENT = "procurement";
@@ -187,4 +188,56 @@ export async function checkMaterials(deps: FeatureDeps, projectId: string): Prom
     raised++;
   }
   return raised;
+}
+
+/**
+ * Brings back a request that was turned down by mistake. With prices already
+ * in, it goes straight to choosing a quote; otherwise it asks again for the
+ * go-ahead to collect prices, with the same reasoning as before.
+ */
+export async function reopenPurchaseRequest(deps: FeatureDeps, input: { purchaseRequestId: string; companyId: string }) {
+  const { db } = deps;
+  const [row] = await db
+    .select({ request: purchaseRequests, project: projects })
+    .from(purchaseRequests)
+    .innerJoin(projects, eq(projects.id, purchaseRequests.projectId))
+    .where(and(eq(purchaseRequests.id, input.purchaseRequestId), eq(projects.companyId, input.companyId)));
+  if (!row) return { error: "not_found" as const };
+  if (row.request.status !== "cancelled") return { error: "not_cancelled" as const };
+  const [newer] = await db
+    .select({ id: purchaseRequests.id })
+    .from(purchaseRequests)
+    .where(
+      and(
+        eq(purchaseRequests.materialId, row.request.materialId),
+        inArray(purchaseRequests.status, ["draft", "pending_approval", "approved", "ordered"]),
+      ),
+    );
+  if (newer) return { error: "newer_open" as const };
+
+  const [priced] = await db.select({ id: quotes.id }).from(quotes).where(eq(quotes.purchaseRequestId, row.request.id)).limit(1);
+  if (priced) {
+    await db.update(purchaseRequests).set({ status: "approved" }).where(eq(purchaseRequests.id, row.request.id));
+    await compareQuotes(deps, row.request.id);
+    return { error: null, step: "order" as const };
+  }
+
+  const [earlier] = await db
+    .select()
+    .from(approvals)
+    .where(and(eq(approvals.projectId, row.project.id), sql`${approvals.action}->>'purchaseRequestId' = ${row.request.id}`))
+    .orderBy(desc(approvals.createdAt))
+    .limit(1);
+  await db.update(purchaseRequests).set({ status: "pending_approval" }).where(eq(purchaseRequests.id, row.request.id));
+  await deps.approvals.propose({
+    companyId: row.project.companyId,
+    projectId: row.project.id,
+    kind: "purchase_request",
+    title: earlier?.title ?? "Order again",
+    summary: earlier?.summary ?? row.request.reason,
+    action: { type: REQUEST_QUOTES, purchaseRequestId: row.request.id },
+    evidence: earlier?.evidence ?? [],
+    requestedBy: PROCUREMENT_AGENT,
+  });
+  return { error: null, step: "quotes" as const };
 }

@@ -63,6 +63,7 @@ describe("buying from suppliers who are not on Telegram", () => {
 
     await t.app.inject({ method: "POST", url: `/approvals/${row.approval!.id}/decision`, headers: owner.auth, payload: { decision: "approve" } });
     expect((await list()).find((r) => r.id === first!.id)!.status).toBe("ordered");
+    expect((await t.app.inject({ method: "POST", url: `/purchase-requests/${first!.id}/reopen`, headers: owner.auth })).statusCode).toBe(409);
 
     // Ordered requests take no more prices.
     const late = await t.app.inject({ method: "POST", url: `/purchase-requests/${first!.id}/quotes`, headers: owner.auth, payload: { supplierId: supplier.id, unitPrice: 1700, leadTimeDays: 1 } });
@@ -75,7 +76,15 @@ describe("buying from suppliers who are not on Telegram", () => {
     await t.app.inject({ method: "POST", url: `/approvals/${first!.approval!.id}/decision`, headers: owner.auth, payload: { decision: "reject", note: "Not needed now" } });
     const [stored] = await t.handle.db.select().from(purchaseRequests).where(eq(purchaseRequests.id, first!.id));
     expect(stored!.status).toBe("cancelled");
-    // With the old one closed, the next stock check raises a fresh request.
+    // Reopened by mistake-undo, it is back at the first decision.
+    const reopened = await t.app.inject({ method: "POST", url: `/purchase-requests/${first!.id}/reopen`, headers: owner.auth });
+    expect(reopened.json()).toEqual({ step: "quotes" });
+    const back = (await list()).find((r) => r.id === first!.id)!;
+    expect(back).toMatchObject({ status: "pending_approval", approval: { step: "quotes" } });
+    expect((await t.app.inject({ method: "POST", url: `/purchase-requests/${first!.id}/reopen`, headers: owner.auth })).statusCode).toBe(409);
+
+    // Turned down again, the next stock check raises a fresh request.
+    await t.app.inject({ method: "POST", url: `/approvals/${back.approval!.id}/decision`, headers: owner.auth, payload: { decision: "reject" } });
     expect(await checkMaterials(t.runtime.deps, projectId)).toBeGreaterThan(0);
   });
 
@@ -90,5 +99,23 @@ describe("buying from suppliers who are not on Telegram", () => {
       payload: { supplierId: "00000000-0000-4000-8000-000000000000", unitPrice: 1, leadTimeDays: 1 },
     });
     expect(response.statusCode).toBe(404);
+  });
+
+  it("reopens a turned-down order at the quote it was waiting on", async () => {
+    const { owner, list } = await sampleWithRequests();
+    const [first] = await list();
+    await t.app.inject({ method: "POST", url: `/approvals/${first!.approval!.id}/decision`, headers: owner.auth, payload: { decision: "approve" } });
+    const suppliers = (await t.app.inject({ method: "GET", url: "/suppliers", headers: owner.auth })).json().suppliers as Array<{ id: string; materials: string[] }>;
+    const supplier = suppliers.find((s) => s.materials.includes(first!.material.name))!;
+    await t.app.inject({ method: "POST", url: `/purchase-requests/${first!.id}/quotes`, headers: owner.auth, payload: { supplierId: supplier.id, unitPrice: 1100, leadTimeDays: 2 } });
+    const pick = (await list()).find((r) => r.id === first!.id)!;
+    await t.app.inject({ method: "POST", url: `/approvals/${pick.approval!.id}/decision`, headers: owner.auth, payload: { decision: "reject" } });
+    expect((await list()).find((r) => r.id === first!.id)!.status).toBe("cancelled");
+
+    const reopened = await t.app.inject({ method: "POST", url: `/purchase-requests/${first!.id}/reopen`, headers: owner.auth });
+    expect(reopened.json()).toEqual({ step: "order" });
+    const back = (await list()).find((r) => r.id === first!.id)!;
+    expect(back).toMatchObject({ status: "approved", approval: { step: "order" } });
+    expect(back.quotes).toHaveLength(1);
   });
 });
