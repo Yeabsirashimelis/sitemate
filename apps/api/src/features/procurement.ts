@@ -88,6 +88,7 @@ async function requestQuotes(
   const [company] = await deps.db.select().from(companies).where(eq(companies.id, project.companyId));
   const candidates = await suppliersFor(deps, project.companyId, input.materialName);
   let asked = 0;
+  const askedIds: string[] = [];
   for (const { supplier, user } of candidates) {
     if (!deps.bot) break;
     const text =
@@ -95,7 +96,10 @@ async function requestQuotes(
       `delivered to ${project.locationName ?? project.name} by ${longDate(request.neededBy)}. ` +
       `Please reply with your price per ${input.unit} in birr and how many days you need to deliver. ` +
       `Reference: PR-${request.id.slice(0, 8).toUpperCase()}`;
-    if (await deps.bot.sendToUser(user, text, { projectId: project.id })) asked++;
+    if (await deps.bot.sendToUser(user, text, { projectId: project.id })) {
+      asked++;
+      askedIds.push(supplier.id);
+    }
   }
   await audit(deps.db, {
     companyId: project.companyId,
@@ -104,6 +108,7 @@ async function requestQuotes(
     action: "procurement.quotes_requested",
     subject: { type: "purchase_request", id: request.id },
     reason: `${plural(asked, "supplier")} asked`,
+    data: { supplierIds: askedIds },
   });
   return asked;
 }

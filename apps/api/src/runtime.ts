@@ -16,9 +16,11 @@ import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
 import { registerProcurementFeature } from "./features/procurement.js";
+import { registerQuotesFeature } from "./features/quotes.js";
 import { registerScheduleFeature } from "./features/schedule.js";
 import { registerSiteFeature } from "./features/site.js";
 import { registerWeatherFeature } from "./features/weather.js";
+import { OpenExchangeRates, type ExchangeRates } from "./integrations/fx.js";
 import { OpenMeteo, type WeatherProvider } from "./integrations/open-meteo.js";
 import type { FeatureDeps } from "./features/types.js";
 import { JobRunner } from "./jobs/queue.js";
@@ -36,6 +38,7 @@ export interface RuntimeOverrides {
   llm?: LlmClient;
   logger?: Logger;
   weather?: WeatherProvider;
+  fx?: ExchangeRates;
   now?: () => Date;
 }
 
@@ -105,6 +108,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     bot,
     approvals,
     weather: overrides.weather ?? new OpenMeteo(),
+    fx: overrides.fx ?? new OpenExchangeRates(),
     scheduler,
     now: overrides.now ?? (() => new Date()),
   };
@@ -113,6 +117,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerScheduleFeature(deps);
   registerWeatherFeature(deps);
   registerProcurementFeature(deps);
+  registerQuotesFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 
