@@ -53,7 +53,7 @@ describe("activity feed", () => {
 
 describe("material state", () => {
   it("does not call a material covered while its order is only raised", () => {
-    expect(materialState({ status: "ok", orderBy: "2026-11-14", openOrderQuantity: 60 })).toMatchObject({ label: "Order raised", needsAction: true });
+    expect(materialState({ status: "ok", orderBy: "2026-11-14", openOrderQuantity: 60 })).toMatchObject({ label: "Requested", needsAction: true });
   });
 
   it("shows the order date when stock runs out beyond the lead time", () => {

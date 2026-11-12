@@ -30,7 +30,7 @@ export const materialLabel = { ok: "Covered", order_soon: "Order soon", order_no
  * page says it is on request rather than covered.
  */
 export function materialState(m: Pick<MaterialRow, "status" | "orderBy" | "openOrderQuantity">): { tone: Tone; label: string; needsAction: boolean } {
-  if (m.openOrderQuantity > 0 && m.status === "ok") return { tone: "info", label: "Order raised", needsAction: !!m.orderBy };
+  if (m.openOrderQuantity > 0 && m.status === "ok") return { tone: "info", label: "Requested", needsAction: !!m.orderBy };
   if (m.status === "ok" && m.orderBy) return { tone: "info", label: `Order by ${shortDate(m.orderBy)}`, needsAction: false };
   return { tone: materialTone[m.status], label: materialLabel[m.status], needsAction: m.status === "order_now" || m.status === "order_soon" };
 }

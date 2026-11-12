@@ -196,6 +196,10 @@ export interface PurchaseRequest {
   createdAt: string;
   material: { id: string; name: string; unit: string };
   quotes: Array<{ id: string; supplierName: string; unitPriceEtb: number; unitPrice: number; currency: string; leadTimeDays: number; note: string | null }>;
+  selectedQuoteId: string | null;
+  suppliersAsked: number | null;
+  /** The decision this request is waiting on, if any. */
+  approval: { id: string; title: string; approverRole: string; step: "quotes" | "order" } | null;
 }
 
 export interface CostReport {
