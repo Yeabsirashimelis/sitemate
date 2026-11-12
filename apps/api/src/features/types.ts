@@ -4,6 +4,7 @@ import type { ApprovalService } from "../approvals/service.js";
 import type { Config } from "../config.js";
 import type { Database } from "../db/client.js";
 import type { EventBus } from "../events.js";
+import type { WeatherProvider } from "../integrations/open-meteo.js";
 import type { JobRunner } from "../jobs/queue.js";
 import type { TelegramBot } from "../telegram/bot.js";
 
@@ -17,6 +18,7 @@ export interface FeatureDeps {
   llm: LlmClient;
   bot: TelegramBot | null;
   approvals: ApprovalService;
+  weather: WeatherProvider;
   /** Current time; replaced in tests. */
   now: () => Date;
 }

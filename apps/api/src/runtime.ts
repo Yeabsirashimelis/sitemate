@@ -17,6 +17,8 @@ import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
 import { registerScheduleFeature } from "./features/schedule.js";
 import { registerSiteFeature } from "./features/site.js";
+import { registerWeatherFeature } from "./features/weather.js";
+import { OpenMeteo, type WeatherProvider } from "./integrations/open-meteo.js";
 import type { FeatureDeps } from "./features/types.js";
 import { JobRunner } from "./jobs/queue.js";
 import { createLogger } from "./logger.js";
@@ -30,6 +32,7 @@ export interface RuntimeOverrides {
   telegramApi?: TelegramApi | null;
   llm?: LlmClient;
   logger?: Logger;
+  weather?: WeatherProvider;
   now?: () => Date;
 }
 
@@ -96,11 +99,13 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     llm,
     bot,
     approvals,
+    weather: overrides.weather ?? new OpenMeteo(),
     now: overrides.now ?? (() => new Date()),
   };
   registerNotifyFeature(deps);
   registerSiteFeature(deps);
   registerScheduleFeature(deps);
+  registerWeatherFeature(deps);
 
   const app = await buildApp({
     config,

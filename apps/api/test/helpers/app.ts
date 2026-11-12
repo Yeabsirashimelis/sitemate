@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { loadConfig, type Config } from "../../src/config.js";
 import type { DatabaseHandle } from "../../src/db/client.js";
+import type { WeatherProvider } from "../../src/integrations/open-meteo.js";
 import { createRuntime, type Runtime } from "../../src/runtime.js";
 import { FakeLlm } from "./llm.js";
 import { createTestDatabase } from "./db.js";
@@ -16,7 +17,7 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function createTestApp(env: Record<string, string> = {}, options: { now?: () => Date } = {}): Promise<TestApp> {
+export async function createTestApp(env: Record<string, string> = {}, options: { now?: () => Date; weather?: WeatherProvider } = {}): Promise<TestApp> {
   const handle = await createTestDatabase();
   const config = loadConfig({ NODE_ENV: "test", AUTH_RATE_LIMIT_PER_MINUTE: "1000", ...env });
   const telegram = new FakeTelegramApi();
@@ -26,6 +27,7 @@ export async function createTestApp(env: Record<string, string> = {}, options: {
     telegramApi: telegram,
     llm,
     ...(options.now ? { now: options.now } : {}),
+    ...(options.weather ? { weather: options.weather } : {}),
   });
   return {
     app: runtime.app,
