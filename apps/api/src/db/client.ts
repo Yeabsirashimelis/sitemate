@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite-pgvector";
@@ -61,7 +61,11 @@ export async function openDatabase({ url, pgliteDir }: OpenDatabaseOptions): Pro
   }
 
   if (pgliteDir) mkdirSync(pgliteDir, { recursive: true });
-  const client = await PGlite.create({ ...(pgliteDir ? { dataDir: pgliteDir } : {}), extensions: { vector } });
+  const releaseLock = pgliteDir ? lockDataDir(pgliteDir) : () => undefined;
+  const client = await PGlite.create({ ...(pgliteDir ? { dataDir: pgliteDir } : {}), extensions: { vector } }).catch((error: unknown) => {
+    releaseLock();
+    throw error;
+  });
   const db = drizzlePglite(client, { schema }) as unknown as Database;
   return {
     db,
@@ -73,6 +77,51 @@ export async function openDatabase({ url, pgliteDir }: OpenDatabaseOptions): Pro
     ping: async () => {
       await db.execute(sql`select 1`);
     },
-    close: () => client.close(),
+    close: async () => {
+      await client.close();
+      releaseLock();
+    },
   };
+}
+
+/**
+ * PGlite is a single-process database: a second process writing to the same
+ * folder corrupts it. A lock file next to the data refuses the second opener
+ * while the first is alive, and is taken over if its owner has died.
+ */
+function lockDataDir(dir: string): () => void {
+  const lockFile = `${dir.replace(/[\\/]+$/, "")}.lock`;
+  try {
+    writeFileSync(lockFile, String(process.pid), { flag: "wx" });
+  } catch {
+    const owner = Number(readFileSync(lockFile, "utf8"));
+    if (owner && owner !== process.pid && isAlive(owner)) {
+      throw new Error(
+        `The local database in ${dir} is in use by process ${owner}. Stop that process first (only one may open it at a time), or set DATABASE_URL to use Postgres.`,
+      );
+    }
+    writeFileSync(lockFile, String(process.pid));
+  }
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    try {
+      if (Number(readFileSync(lockFile, "utf8")) === process.pid) rmSync(lockFile);
+    } catch {
+      // Already gone.
+    }
+  };
+  process.once("exit", release);
+  return release;
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means it exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
