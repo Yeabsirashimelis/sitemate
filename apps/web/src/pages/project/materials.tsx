@@ -1,4 +1,7 @@
-import { Code, Empty, ErrorNote, Loading, Section, Status, Table, Td, Th } from "../../components/ui";
+import { useState } from "react";
+import { AddMaterialDialog, SuppliersSection } from "../../components/material-setup";
+import { Button, Code, Empty, ErrorNote, Loading, Section, Status, Table, Td, Th } from "../../components/ui";
+import { useCan } from "../../lib/auth";
 import { birr, dayDate, number, plural, relativeTime } from "../../lib/format";
 import { useMaterials, usePurchases } from "../../lib/queries";
 import { materialState } from "../../lib/status";
@@ -39,12 +42,25 @@ export function MaterialsTab() {
   const { project } = useProjectContext();
   const materials = useMaterials(project.id);
   const purchases = usePurchases(project.id);
+  const can = useCan();
+  const [adding, setAdding] = useState(false);
 
   if (materials.isLoading) return <Loading />;
   return (
     <div className="flex flex-col gap-10">
       <ErrorNote error={materials.error ?? purchases.error} />
-      <Section title="Stock and run-out forecast" aside="Usage is learned from the daily logs and matched with the work planned in the next three weeks">
+      <Section
+        title="Stock and run-out forecast"
+        aside={
+          can.manage ? (
+            <Button size="sm" onClick={() => setAdding(true)}>
+              Add material
+            </Button>
+          ) : (
+            "Usage is learned from the daily logs and matched with the work planned in the next three weeks"
+          )
+        }
+      >
         {materials.data?.materials.length ? (
           <Table>
             <thead>
@@ -86,7 +102,7 @@ export function MaterialsTab() {
             </tbody>
           </Table>
         ) : (
-          <Empty title="No materials tracked yet" />
+          <Empty title="No materials tracked yet">Add the materials you want SiteMate to watch. Supervisors then report deliveries and use on Telegram, and the forecast tells you when to order.</Empty>
         )}
       </Section>
 
@@ -136,6 +152,9 @@ export function MaterialsTab() {
           <p className="text-[13px] text-ink-3">No purchase requests yet. The procurement agent raises one when a material will run out before a new delivery could arrive.</p>
         )}
       </Section>
+
+      <SuppliersSection lastPrices={Object.fromEntries((materials.data?.materials ?? []).map((m) => [m.name, m.lastUnitPrice]))} />
+      <AddMaterialDialog projectId={project.id} open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

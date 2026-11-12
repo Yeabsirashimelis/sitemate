@@ -84,7 +84,7 @@ function AddPersonDialog({ open, onClose }: { open: boolean; onClose: () => void
   );
 }
 
-function InviteDialog({ user, onClose }: { user: User | null; onClose: () => void }) {
+export function InviteDialog({ user, onClose }: { user: Pick<User, "id" | "name"> | null; onClose: () => void }) {
   const invite = useMutation({
     mutationFn: (id: string) => api<{ code: string; link: string | null; expiresAt: string }>(`/users/${id}/telegram-invite`, { method: "POST" }),
   });

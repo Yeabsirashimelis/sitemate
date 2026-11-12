@@ -1,6 +1,9 @@
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router";
 import { ApprovalCard } from "../../components/approval-card";
+import { ScheduleImport } from "../../components/project-setup";
+import { ApiError } from "../../lib/api";
+import { useCan } from "../../lib/auth";
 import { Code, Empty, Figure, Loading, Section, Status, StatusIcon } from "../../components/ui";
 import { birr, dayDate, longDate, number, perfIndex, plural, relativeTime, slipText } from "../../lib/format";
 import { useActivity, useApprovals, useClaims, useCost, useDailyLogs, useMaterials, useSchedule } from "../../lib/queries";
@@ -18,7 +21,21 @@ export function OverviewTab() {
   const logs = useDailyLogs(project.id);
   const activity = useActivity(project.id);
 
+  const can = useCan();
+
   if (schedule.isLoading) return <Loading />;
+  if (schedule.error instanceof ApiError && schedule.error.status === 404) {
+    return can.manage ? (
+      <div className="flex max-w-3xl flex-col gap-4">
+        <p className="text-[14px] text-ink-2">
+          {project.name} is set up. Import its schedule and SiteMate starts tracking the critical path, the look-ahead, materials and cost.
+        </p>
+        <ScheduleImport projectId={project.id} />
+      </div>
+    ) : (
+      <Empty title="No schedule yet">The project manager imports it from Excel or MS Project as CSV.</Empty>
+    );
+  }
   const s = schedule.data?.schedule;
   const tone = slipTone(s?.slipDays);
   const pending = (approvals.data?.approvals ?? []).filter((a) => a.projectId === project.id);
@@ -54,9 +71,9 @@ export function OverviewTab() {
             <Figure label="Cost performance" value={perfIndex(summary?.cpi)} tone={indexTone(summary?.cpi)} note="Earned vs spent" />
             <Figure
               label="Materials"
-              value={toOrder.length ? `${number(toOrder.length)} to order` : short.length ? `${number(short.length)} raised` : "Covered"}
-              tone={toOrder.some((m) => m.status === "order_now") ? "critical" : toOrder.length ? "warning" : short.length ? "info" : "good"}
-              note={short.length && !toOrder.length ? "Waiting for approval or delivery" : undefined}
+              value={materials.data?.materials.length === 0 ? "None yet" : toOrder.length ? `${number(toOrder.length)} to order` : short.length ? `${number(short.length)} raised` : "Covered"}
+              tone={materials.data?.materials.length === 0 ? "neutral" : toOrder.some((m) => m.status === "order_now") ? "critical" : toOrder.length ? "warning" : short.length ? "info" : "good"}
+              note={materials.data?.materials.length === 0 ? "Add them on the Materials tab" : short.length && !toOrder.length ? "Waiting for approval or delivery" : undefined}
             />
             <Figure
               label="Claims file"

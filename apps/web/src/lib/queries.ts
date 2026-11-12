@@ -31,6 +31,7 @@ export const keys = {
   schedule: (id: string) => ["project", id, "schedule"] as QueryKey,
   lookahead: (id: string) => ["project", id, "lookahead"] as QueryKey,
   calendar: (id: string) => ["project", id, "calendar"] as QueryKey,
+  suppliers: ["suppliers"] as QueryKey,
   measures: (id: string) => ["project", id, "measures"] as QueryKey,
   materials: (id: string) => ["project", id, "materials"] as QueryKey,
   purchases: (id: string) => ["project", id, "purchases"] as QueryKey,
@@ -62,6 +63,17 @@ export interface CalendarStatus {
 }
 
 export const useCalendarStatus = (id: string) => useQuery({ queryKey: keys.calendar(id), queryFn: get<CalendarStatus>(`/projects/${id}/calendar`) });
+
+export interface Supplier {
+  id: string;
+  name: string;
+  userId: string | null;
+  phone: string | null;
+  materials: string[];
+  telegramLinked: boolean;
+}
+
+export const useSuppliers = () => useQuery({ queryKey: keys.suppliers, queryFn: get<{ suppliers: Supplier[] }>("/suppliers") });
 
 export const useMeasures = (id: string) =>
   useQuery({ queryKey: keys.measures(id), queryFn: get<{ measures: RecoveryMeasure[] }>(`/projects/${id}/recovery-measures`) });
