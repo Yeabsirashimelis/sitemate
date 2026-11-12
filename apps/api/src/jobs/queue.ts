@@ -206,22 +206,37 @@ export class JobRunner {
     return processed;
   }
 
+  private intervalMs = 1000;
+  private ticking = false;
+
+  private readonly tick = async (): Promise<void> => {
+    if (!this.running || this.ticking) return;
+    this.ticking = true;
+    try {
+      await releaseStaleJobs(this.db, 10 * 60_000);
+      this.active = this.drain({ maxJobs: 20 });
+      await this.active;
+    } catch (error) {
+      this.logger.error({ err: error }, "Job runner tick failed");
+    } finally {
+      this.ticking = false;
+    }
+    if (this.running) this.timer = setTimeout(this.tick, this.intervalMs);
+  };
+
   /** Polls for work in the background until stop() is called. */
   start(intervalMs = 1000): void {
     if (this.running) return;
     this.running = true;
-    const tick = async () => {
-      if (!this.running) return;
-      try {
-        await releaseStaleJobs(this.db, 10 * 60_000);
-        this.active = this.drain({ maxJobs: 20 });
-        await this.active;
-      } catch (error) {
-        this.logger.error({ err: error }, "Job runner tick failed");
-      }
-      if (this.running) this.timer = setTimeout(tick, intervalMs);
-    };
-    this.timer = setTimeout(tick, 0);
+    this.intervalMs = intervalMs;
+    this.timer = setTimeout(this.tick, 0);
+  }
+
+  /** Looks for work now instead of waiting for the next poll. */
+  poke(): void {
+    if (!this.running || this.ticking) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(this.tick, 0);
   }
 
   async stop(): Promise<void> {

@@ -1,28 +1,31 @@
 import type { FastifyInstance } from "fastify";
-import { buildApp } from "../../src/app.js";
 import { loadConfig, type Config } from "../../src/config.js";
 import type { DatabaseHandle } from "../../src/db/client.js";
+import { createRuntime, type Runtime } from "../../src/runtime.js";
 import { createTestDatabase } from "./db.js";
+import { FakeTelegramApi } from "./telegram.js";
 
 export interface TestApp {
   app: FastifyInstance;
   handle: DatabaseHandle;
   config: Config;
+  runtime: Runtime;
+  telegram: FakeTelegramApi;
   close(): Promise<void>;
 }
 
 export async function createTestApp(env: Record<string, string> = {}): Promise<TestApp> {
   const handle = await createTestDatabase();
-  const config = loadConfig({ NODE_ENV: "test", ...env });
-  const app = await buildApp({ config, db: handle.db });
+  const config = loadConfig({ NODE_ENV: "test", AUTH_RATE_LIMIT_PER_MINUTE: "1000", ...env });
+  const telegram = new FakeTelegramApi();
+  const runtime = await createRuntime(config, { database: handle, telegramApi: telegram });
   return {
-    app,
+    app: runtime.app,
     handle,
     config,
-    close: async () => {
-      await app.close();
-      await handle.close();
-    },
+    runtime,
+    telegram,
+    close: () => runtime.stop(),
   };
 }
 
@@ -34,7 +37,7 @@ export async function registerCompany(app: FastifyInstance, name = "Abay Constru
   const response = await app.inject({
     method: "POST",
     url: "/auth/register",
-    payload: { companyName: name, name: "Owner", email: `owner${counter}@example.com`, password: "correct horse 1" },
+    payload: { companyName: name, name: "Owner", email: `owner${counter}-${Date.now()}@example.com`, password: "correct horse 1" },
   });
   if (response.statusCode !== 201) throw new Error(`register failed: ${response.body}`);
   const body = response.json() as { token: string; user: { id: string; email: string }; company: { id: string } };

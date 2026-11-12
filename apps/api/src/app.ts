@@ -1,32 +1,39 @@
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
+import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import type { Database } from "./db/client.js";
 import { registerAuth } from "./http/auth.js";
 import { registerErrorHandler } from "./http/errors.js";
+import { createLogger } from "./logger.js";
 import { authRoutes } from "./routes/auth.js";
 import { projectRoutes } from "./routes/projects.js";
+import { telegramRoutes } from "./routes/telegram.js";
 import { userRoutes } from "./routes/users.js";
 
 export interface AppOptions {
   config: Config;
+  logger?: Logger;
   /** Without a database only the health endpoints are served. */
   db?: Database;
   /** Extra readiness checks, e.g. the database. */
   readinessChecks?: Array<{ name: string; check: () => Promise<void> }>;
+  /** Called after a Telegram update has been stored, to start processing it straight away. */
+  onTelegramUpdate?: () => void;
 }
 
-export async function buildApp({ config, db, readinessChecks = [] }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({
+  config,
+  logger = createLogger(config),
+  db,
+  readinessChecks = [],
+  onTelegramUpdate = () => {},
+}: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
-    logger:
-      config.NODE_ENV === "test"
-        ? false
-        : {
-            level: config.LOG_LEVEL,
-            redact: ["req.headers.authorization", "req.headers.cookie", 'req.headers["x-telegram-bot-api-secret-token"]'],
-            ...(config.NODE_ENV === "development" ? { transport: { target: "pino-pretty" } } : {}),
-          },
+    // Fastify's logger type is pino's with its own generics; the instance is the same.
+    loggerInstance: logger as FastifyBaseLogger,
+    disableRequestLogging: config.NODE_ENV === "test",
     trustProxy: true,
     bodyLimit: 2 * 1024 * 1024,
   });
@@ -63,6 +70,7 @@ export async function buildApp({ config, db, readinessChecks = [] }: AppOptions)
     authRoutes(app, db, config);
     userRoutes(app, db, config);
     projectRoutes(app, db);
+    telegramRoutes(app, db, config, onTelegramUpdate);
   }
 
   return app;
