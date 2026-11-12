@@ -98,9 +98,9 @@ export async function setupSiteProject(t: TestApp, options: { language?: "en" | 
 export async function addLinkedUser(
   t: TestApp,
   ownerAuth: Record<string, string>,
-  input: { name: string; role: "owner" | "project_manager" | "site_engineer" | "supervisor"; projectId?: string },
+  input: { name: string; role: "owner" | "project_manager" | "site_engineer" | "supervisor" | "consultant"; projectId?: string },
 ) {
-  const dashboard = input.role !== "supervisor";
+  const dashboard = input.role !== "supervisor" && input.role !== "consultant";
   const email = `${input.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`;
   const password = "member password 1";
   const created = await t.app.inject({

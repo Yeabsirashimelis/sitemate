@@ -51,6 +51,8 @@ export const userRole = pgEnum("user_role", [
   "supervisor",
   "subcontractor",
   "supplier",
+  /** The client's engineer. Receives RFIs on Telegram and answers there; never signs in to the dashboard. */
+  "consultant",
 ]);
 export const language = pgEnum("language", ["en", "am"]);
 export const linkType = pgEnum("link_type", ["FS", "SS", "FF", "SF"]);

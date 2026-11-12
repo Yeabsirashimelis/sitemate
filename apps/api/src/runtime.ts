@@ -17,6 +17,7 @@ import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
 import { registerCalendarFeature } from "./features/calendar.js";
 import { registerClaimsFeature } from "./features/claims.js";
+import { registerRfiFeature } from "./features/rfis.js";
 import { registerCostFeature } from "./features/cost.js";
 import { registerDocumentsFeature } from "./features/documents.js";
 import { registerPlanningFeature } from "./features/planning.js";
@@ -133,6 +134,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerPlanningFeature(deps);
   registerDocumentsFeature(deps);
   registerClaimsFeature(deps);
+  registerRfiFeature(deps);
   registerCalendarFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));

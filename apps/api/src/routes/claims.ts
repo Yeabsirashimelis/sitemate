@@ -1,12 +1,11 @@
-import { addCalendarDays } from "@sitemate/engine";
 import { and, desc, eq, max } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { DASHBOARD_ROLES, MANAGER_ROLES } from "../auth/permissions.js";
 import type { Database } from "../db/client.js";
-import { activities, claimEvents, rfis } from "../db/schema.js";
-import { longDate } from "../domain/format.js";
-import { recordRfiAnswer, SEND_RFI } from "../features/claims.js";
+import { activities, claimEvents, companies, rfis } from "../db/schema.js";
+import { recordRfiAnswer } from "../features/claims.js";
+import { raiseRfi, rfiLetter } from "../features/rfis.js";
 import type { FeatureDeps } from "../features/types.js";
 import { requireRole } from "../http/auth.js";
 import { badRequest, notFound } from "../http/errors.js";
@@ -28,12 +27,12 @@ export function claimRoutes(app: FastifyInstance, db: Database, deps: FeatureDep
     const { projectId } = projectParams.parse(request.params);
     await getAccessibleProject(db, user, projectId);
     const rows = await db
-      .select({ rfi: rfis, activityCode: activities.code })
+      .select({ rfi: rfis, activityCode: activities.code, activityName: activities.name })
       .from(rfis)
       .leftJoin(activities, eq(activities.id, rfis.activityId))
       .where(eq(rfis.projectId, projectId))
       .orderBy(desc(rfis.number));
-    return { rfis: rows.map((r) => ({ ...r.rfi, activityCode: r.activityCode })) };
+    return { rfis: rows.map((r) => ({ ...r.rfi, activityCode: r.activityCode, activityName: r.activityName })) };
   });
 
   /** Drafts a request for information; it goes to the consultant once the project manager approves. */
@@ -53,33 +52,7 @@ export function claimRoutes(app: FastifyInstance, db: Database, deps: FeatureDep
       activityId = activity.id;
     }
 
-    const rfi = await db.transaction(async (tx) => {
-      const [{ last }] = (await tx.select({ last: max(rfis.number) }).from(rfis).where(eq(rfis.projectId, projectId))) as [{ last: number | null }];
-      const raisedOn = project.dataDate;
-      const [created] = await tx
-        .insert(rfis)
-        .values({
-          projectId,
-          number: (last ?? 0) + 1,
-          question: body.question,
-          activityId,
-          status: "pending_approval",
-          raisedOn,
-          dueOn: addCalendarDays(raisedOn, body.dueInDays),
-        })
-        .returning();
-      return created!;
-    });
-
-    await deps.approvals.propose({
-      companyId: project.companyId,
-      projectId,
-      kind: "consultant_rfi",
-      title: `Send RFI ${rfi.number} to ${project.consultant ?? "the consultant"}`,
-      summary: `${rfi.question}\n\nAnswer requested by ${longDate(rfi.dueOn)}.${body.activityCode ? ` Needed for ${body.activityCode}.` : ""}`,
-      action: { type: SEND_RFI, rfiId: rfi.id },
-      requestedBy: user.id,
-    });
+    const rfi = await raiseRfi(deps, { project, question: body.question, activityId, dueInDays: body.dueInDays, requestedBy: user.id });
     return reply.status(201).send({ rfi });
   });
 
@@ -95,6 +68,24 @@ export function claimRoutes(app: FastifyInstance, db: Database, deps: FeatureDep
     } catch (error) {
       throw badRequest(error instanceof Error ? error.message : "Could not record the answer");
     }
+  });
+
+  /** The RFI as a letter, for consultants who are not on Telegram. */
+  app.get("/projects/:projectId/rfis/:rfiId/letter", async (request) => {
+    const user = requireRole(request, DASHBOARD_ROLES);
+    const { projectId, rfiId } = rfiParams.parse(request.params);
+    const project = await getAccessibleProject(db, user, projectId);
+    const [row] = await db
+      .select({ rfi: rfis, activity: activities })
+      .from(rfis)
+      .leftJoin(activities, eq(activities.id, rfis.activityId))
+      .where(and(eq(rfis.id, rfiId), eq(rfis.projectId, projectId)));
+    if (!row) throw notFound("RFI");
+    const [company] = await db.select().from(companies).where(eq(companies.id, project.companyId));
+    return {
+      subject: `RFI ${row.rfi.number}, ${project.name}`,
+      letter: rfiLetter({ rfi: row.rfi, project, company: company?.name ?? "The contractor", activity: row.activity }),
+    };
   });
 
   app.get("/projects/:projectId/claims", async (request) => {

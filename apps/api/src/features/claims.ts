@@ -44,7 +44,6 @@ import { whatIf } from "./schedule.js";
 import type { FeatureDeps } from "./types.js";
 
 export const SEND_NOTICE = "claims.send_notice";
-export const SEND_RFI = "rfi.send";
 
 const delayPayload = z.object({
   projectId: z.uuid(),
@@ -81,16 +80,6 @@ export function registerClaimsFeature(deps: FeatureDeps): void {
       reason: event.title,
     });
     return { claimEventId: event.id, status: event.status };
-  });
-
-  approvals.register(SEND_RFI, z.object({ rfiId: z.uuid() }), async (action, context) => {
-    const [rfi] = await context.db
-      .update(rfis)
-      .set({ status: "sent" })
-      .where(and(eq(rfis.id, action.rfiId), eq(rfis.status, "pending_approval")))
-      .returning();
-    if (!rfi) throw new Error("This RFI is no longer waiting to be sent");
-    return { number: rfi.number, dueOn: rfi.dueOn };
   });
 
   // Overdue answers from the consultant: remind the project manager once a day.
