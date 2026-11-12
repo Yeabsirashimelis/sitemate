@@ -16,12 +16,17 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function createTestApp(env: Record<string, string> = {}): Promise<TestApp> {
+export async function createTestApp(env: Record<string, string> = {}, options: { now?: () => Date } = {}): Promise<TestApp> {
   const handle = await createTestDatabase();
   const config = loadConfig({ NODE_ENV: "test", AUTH_RATE_LIMIT_PER_MINUTE: "1000", ...env });
   const telegram = new FakeTelegramApi();
   const llm = new FakeLlm();
-  const runtime = await createRuntime(config, { database: handle, telegramApi: telegram, llm });
+  const runtime = await createRuntime(config, {
+    database: handle,
+    telegramApi: telegram,
+    llm,
+    ...(options.now ? { now: options.now } : {}),
+  });
   return {
     app: runtime.app,
     handle,

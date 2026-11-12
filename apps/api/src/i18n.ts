@@ -33,6 +33,20 @@ const messages = {
     en: () => "Sorry, something went wrong on my side. I have noted it, please try again in a few minutes.",
     am: () => "ይቅርታ፣ በእኔ በኩል ችግር ተፈጥሯል። እባክዎ ከጥቂት ደቂቃዎች በኋላ እንደገና ይሞክሩ።",
   },
+  checkIn: {
+    en: (name: string, project: string) =>
+      `Good evening ${name}. Please send today's update for ${project}: what work was done, how many workers by trade, materials received or used, any problems, and a few photos. A voice note is fine.`,
+    am: (name: string, project: string) =>
+      `እንደምን አመሹ ${name}። እባክዎ የዛሬውን የ${project} ሪፖርት ይላኩ፦ የተሰራው ስራ፣ የሰራተኞች ብዛት በሙያ፣ የገቡ ወይም የተጠቀሙባቸው ማቴሪያሎች፣ ያጋጠሙ ችግሮች እና ጥቂት ፎቶዎች። የድምፅ መልዕክትም ይቻላል።`,
+  },
+  logSaved: {
+    en: (summary: string) => `Thank you. Today's log is saved.\n\n${summary}`,
+    am: (_summary: string) => "አመሰግናለሁ። የዛሬው ሪፖርት ተመዝግቧል።",
+  },
+  logFailed: {
+    en: () => "Thank you. I could not process your update automatically, so I have passed it to your project manager.",
+    am: () => "አመሰግናለሁ። ሪፖርትዎን በራሴ ማስኬድ አልቻልኩም፣ ስለዚህ ለፕሮጀክት ማኔጀርዎ አስተላልፌዋለሁ።",
+  },
 } as const;
 
 export type MessageKey = keyof typeof messages;

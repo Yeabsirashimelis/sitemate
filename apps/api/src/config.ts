@@ -41,6 +41,9 @@ const schema = z.object({
   GOOGLE_CALENDAR_ID: optional,
   GOOGLE_SERVICE_ACCOUNT_FILE: z.string().default("google-service-account.json"),
 
+  /** Seconds to wait after a supervisor's last message before processing, so a burst is read together. */
+  SITE_BATCH_SECONDS: z.coerce.number().int().min(0).max(600).default(45),
+
   /** Time zone used for "today" on site. */
   SITE_TIME_ZONE: z.string().default("Africa/Addis_Ababa"),
 });

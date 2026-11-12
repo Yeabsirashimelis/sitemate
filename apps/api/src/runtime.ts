@@ -12,6 +12,9 @@ import { buildApp } from "./app.js";
 import type { Config } from "./config.js";
 import { openDatabase, type DatabaseHandle } from "./db/client.js";
 import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
+import { EventBus } from "./events.js";
+import { registerSiteFeature } from "./features/site.js";
+import type { FeatureDeps } from "./features/types.js";
 import { JobRunner } from "./jobs/queue.js";
 import { createLogger } from "./logger.js";
 import { HttpTelegramApi, type TelegramApi } from "./telegram/api.js";
@@ -24,6 +27,7 @@ export interface RuntimeOverrides {
   telegramApi?: TelegramApi | null;
   llm?: LlmClient;
   logger?: Logger;
+  now?: () => Date;
 }
 
 export interface Runtime {
@@ -33,6 +37,9 @@ export interface Runtime {
   runner: JobRunner;
   bot: TelegramBot | null;
   llm: LlmClient;
+  events: EventBus;
+  /** Dependencies handed to feature modules, also used by scheduled jobs and tests. */
+  deps: FeatureDeps;
   app: FastifyInstance;
   /** Starts background work: the job runner and, in development, Telegram polling. */
   start(): Promise<void>;
@@ -73,6 +80,19 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     });
   }
 
+  const events = new EventBus(runner);
+  const deps: FeatureDeps = {
+    config,
+    db: database.db,
+    logger,
+    runner,
+    events,
+    llm,
+    bot,
+    now: overrides.now ?? (() => new Date()),
+  };
+  registerSiteFeature(deps);
+
   const app = await buildApp({
     config,
     logger,
@@ -93,6 +113,8 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     runner,
     bot,
     llm,
+    events,
+    deps,
     app,
     start: async () => {
       if (telegramApi && config.telegramMode === "webhook") {
