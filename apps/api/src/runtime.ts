@@ -8,6 +8,7 @@ import type { FastifyInstance } from "fastify";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { DisabledLlm, GeminiClient, type LlmClient } from "./ai/llm.js";
+import { ApprovalService } from "./approvals/service.js";
 import { buildApp } from "./app.js";
 import type { Config } from "./config.js";
 import { openDatabase, type DatabaseHandle } from "./db/client.js";
@@ -81,6 +82,9 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   }
 
   const events = new EventBus(runner);
+  const approvals = new ApprovalService(database.db, bot, {
+    ownerApprovalThresholdEtb: config.OWNER_APPROVAL_THRESHOLD_ETB,
+  });
   const deps: FeatureDeps = {
     config,
     db: database.db,
@@ -89,6 +93,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     events,
     llm,
     bot,
+    approvals,
     now: overrides.now ?? (() => new Date()),
   };
   registerSiteFeature(deps);
@@ -99,6 +104,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
     db: database.db,
     readinessChecks: [{ name: "database", check: database.ping }],
     onTelegramUpdate: () => runner.poke(),
+    services: { approvals },
   });
 
   const poller =

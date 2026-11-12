@@ -7,6 +7,8 @@ import type { Database } from "./db/client.js";
 import { registerAuth } from "./http/auth.js";
 import { registerErrorHandler } from "./http/errors.js";
 import { createLogger } from "./logger.js";
+import type { ApprovalService } from "./approvals/service.js";
+import { approvalRoutes } from "./routes/approvals.js";
 import { authRoutes } from "./routes/auth.js";
 import { projectRoutes } from "./routes/projects.js";
 import { telegramRoutes } from "./routes/telegram.js";
@@ -21,6 +23,12 @@ export interface AppOptions {
   readinessChecks?: Array<{ name: string; check: () => Promise<void> }>;
   /** Called after a Telegram update has been stored, to start processing it straight away. */
   onTelegramUpdate?: () => void;
+  /** Services the routes need, built by the runtime. */
+  services?: AppServices;
+}
+
+export interface AppServices {
+  approvals: ApprovalService;
 }
 
 export async function buildApp({
@@ -29,6 +37,7 @@ export async function buildApp({
   db,
   readinessChecks = [],
   onTelegramUpdate = () => {},
+  services,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     // Fastify's logger type is pino's with its own generics; the instance is the same.
@@ -71,6 +80,9 @@ export async function buildApp({
     userRoutes(app, db, config);
     projectRoutes(app, db);
     telegramRoutes(app, db, config, onTelegramUpdate);
+    if (services) {
+      approvalRoutes(app, db, services.approvals);
+    }
   }
 
   return app;

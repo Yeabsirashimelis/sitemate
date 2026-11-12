@@ -91,6 +91,42 @@ export async function setupSiteProject(t: TestApp, options: { language?: "en" | 
   };
 }
 
+/**
+ * Adds a team member to a project and links their Telegram. Dashboard roles
+ * also get a signed-in auth header.
+ */
+export async function addLinkedUser(
+  t: TestApp,
+  ownerAuth: Record<string, string>,
+  input: { name: string; role: "owner" | "project_manager" | "site_engineer" | "supervisor"; projectId?: string },
+) {
+  const dashboard = input.role !== "supervisor";
+  const email = `${input.role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`;
+  const password = "member password 1";
+  const created = await t.app.inject({
+    method: "POST",
+    url: "/users",
+    headers: ownerAuth,
+    payload: { name: input.name, role: input.role, ...(dashboard ? { email, password } : {}) },
+  });
+  if (created.statusCode !== 201) throw new Error(`create user failed: ${created.body}`);
+  const id = created.json().user.id as string;
+  if (input.projectId) {
+    await t.app.inject({ method: "PUT", url: `/projects/${input.projectId}/members/${id}`, headers: ownerAuth });
+  }
+  const code = (await t.app.inject({ method: "POST", url: `/users/${id}/telegram-invite`, headers: ownerAuth })).json()
+    .code as string;
+  const telegramId = ++telegramIds;
+  await deliver(t, textUpdate(telegramId, `/start ${code}`));
+
+  let auth: Record<string, string> | null = null;
+  if (dashboard) {
+    const login = await t.app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
+    auth = { authorization: `Bearer ${login.json().token}` };
+  }
+  return { id, telegramId, auth };
+}
+
 function eqId(id: string) {
   return eq(materials.id, id);
 }

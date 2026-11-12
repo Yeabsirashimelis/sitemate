@@ -46,6 +46,9 @@ const schema = z.object({
 
   /** Time zone used for "today" on site. */
   SITE_TIME_ZONE: z.string().default("Africa/Addis_Ababa"),
+
+  /** Purchases and recovery plans above this amount, in birr, need the owner's approval. */
+  OWNER_APPROVAL_THRESHOLD_ETB: z.coerce.number().nonnegative().default(200_000),
 });
 
 export type Config = z.infer<typeof schema> & {
