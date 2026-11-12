@@ -5,8 +5,10 @@ import { DASHBOARD_ROLES, MANAGER_ROLES } from "../auth/permissions.js";
 import { audit } from "../audit.js";
 import type { Database } from "../db/client.js";
 import { activityKind, approvals, auditLog, materials, materialTransactions, purchaseRequests, quotes, suppliers, users } from "../db/schema.js";
+import { PROCUREMENT_CHECK_JOB } from "../features/procurement.js";
 import { requireRole } from "../http/auth.js";
 import { conflict, notFound } from "../http/errors.js";
+import { enqueue } from "../jobs/queue.js";
 import { getAccessibleProject } from "../services/access.js";
 import { recomputeStock } from "../services/daily-logs.js";
 import { forecastMaterials } from "../services/materials.js";
@@ -135,6 +137,8 @@ export function materialRoutes(app: FastifyInstance, db: Database): void {
         reason: body.note,
         data: { quantity: body.quantity },
       });
+      // A lower count can mean it is time to order; let the procurement agent look now.
+      await enqueue(tx, PROCUREMENT_CHECK_JOB, { projectId });
     });
     const [fresh] = await db.select().from(materials).where(eq(materials.id, materialId));
     return { material: fresh };

@@ -2,8 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useCan } from "../lib/auth";
-import { birr } from "../lib/format";
+import { birr, number } from "../lib/format";
 import { keys, useSuppliers } from "../lib/queries";
+import type { MaterialRow } from "../lib/types";
 import { InviteDialog } from "../pages/team";
 import { Button, Dialog, ErrorNote, Field, Input, Section, Select, Status, Table, Td, Th, cx } from "./ui";
 
@@ -251,5 +252,61 @@ export function SuppliersSection({ lastPrices }: { lastPrices: Record<string, nu
       <AddSupplierDialog open={adding} onClose={() => setAdding(false)} />
       <InviteDialog user={inviting} onClose={() => setInviting(null)} />
     </Section>
+  );
+}
+
+/** A physical count on site. The difference is booked as an adjustment and the forecast follows. */
+export function CountDialog({ projectId, material, onClose }: { projectId: string; material: MaterialRow | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [counted, setCounted] = useState("");
+  const count = useMutation({
+    mutationFn: () =>
+      api(`/projects/${projectId}/materials/${material!.id}/adjust`, {
+        body: { quantity: Number(counted) - material!.onHand, note: "Stock count on site" },
+      }),
+    onSuccess: () => {
+      setCounted("");
+      onClose();
+      // The procurement agent looks right after a count; refresh once it has.
+      void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["project", projectId] }), 3000);
+    },
+  });
+  const difference = counted === "" || !material ? null : Number(counted) - material.onHand;
+
+  return (
+    <Dialog
+      open={material !== null}
+      onClose={() => {
+        count.reset();
+        setCounted("");
+        onClose();
+      }}
+      title={material ? `Count ${material.name.toLowerCase()} on site` : "Count"}
+    >
+      {material ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            count.mutate();
+          }}
+          className="flex flex-col gap-4"
+        >
+          <p className="text-[13px] text-ink-2">
+            The records say {number(material.onHand, 1)} {material.unit}. Enter what is actually there and SiteMate corrects the stock, then checks whether it is time to
+            order.
+          </p>
+          <Field label={`Counted, ${material.unit}`} hint={difference ? `${difference > 0 ? "+" : ""}${number(difference, 1)} ${material.unit} against the records` : undefined}>
+            <Input type="number" required min={0} step="any" value={counted} onChange={(e) => setCounted(e.target.value)} className="w-48" autoFocus />
+          </Field>
+          <ErrorNote error={count.error} />
+          <div className="flex justify-end">
+            <Button type="submit" variant="primary" busy={count.isPending} disabled={!difference}>
+              Save count
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </Dialog>
   );
 }

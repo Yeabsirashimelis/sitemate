@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AddMaterialDialog, SuppliersSection } from "../../components/material-setup";
+import { AddMaterialDialog, CountDialog, SuppliersSection } from "../../components/material-setup";
 import { PurchaseCard } from "../../components/purchase-card";
 import { Button, Empty, ErrorNote, Loading, Section, Status, Table, Td, Th } from "../../components/ui";
 import { useCan } from "../../lib/auth";
@@ -36,6 +36,7 @@ export function MaterialsTab() {
   const purchases = usePurchases(project.id);
   const can = useCan();
   const [adding, setAdding] = useState(false);
+  const [counting, setCounting] = useState<MaterialRow | null>(null);
 
   if (materials.isLoading) return <Loading />;
   return (
@@ -72,6 +73,14 @@ export function MaterialsTab() {
                   <Td className="font-medium">{m.name}</Td>
                   <Td align="right">
                     {number(m.onHand, 1)} {m.unit}
+                    <button
+                      type="button"
+                      onClick={() => setCounting(m)}
+                      className="ml-2 text-[11px] font-medium text-ink-3 underline underline-offset-2 hover:text-ink"
+                      aria-label={`Enter a stock count for ${m.name}`}
+                    >
+                      Count
+                    </button>
                   </Td>
                   <Td align="right">
                     {number(m.dailyUse, 1)} {m.unit}
@@ -112,6 +121,7 @@ export function MaterialsTab() {
 
       <SuppliersSection lastPrices={Object.fromEntries((materials.data?.materials ?? []).map((m) => [m.name, m.lastUnitPrice]))} />
       <AddMaterialDialog projectId={project.id} open={adding} onClose={() => setAdding(false)} />
+      <CountDialog projectId={project.id} material={counting} onClose={() => setCounting(null)} />
     </div>
   );
 }
