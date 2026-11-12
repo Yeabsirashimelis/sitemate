@@ -12,6 +12,7 @@ import { approvalRoutes } from "./routes/approvals.js";
 import { jobRoutes } from "./routes/jobs.js";
 import type { Scheduler } from "./scheduler.js";
 import type { FeatureDeps } from "./features/types.js";
+import { claimRoutes } from "./routes/claims.js";
 import { costRoutes } from "./routes/cost.js";
 import { documentRoutes } from "./routes/documents.js";
 import { authRoutes } from "./routes/auth.js";
@@ -95,6 +96,7 @@ export async function buildApp({
       approvalRoutes(app, db, services.approvals);
       jobRoutes(app, config, services.scheduler);
       costRoutes(app, db, services.deps);
+      claimRoutes(app, db, services.deps);
       documentRoutes(app, db, services.deps, () => services.deps.runner.poke());
     }
   }

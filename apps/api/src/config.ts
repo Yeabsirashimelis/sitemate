@@ -47,6 +47,11 @@ const schema = z.object({
   /** Time zone used for "today" on site. */
   SITE_TIME_ZONE: z.string().default("Africa/Addis_Ababa"),
 
+  /** Days the contract allows to give notice of a delay claim. */
+  CLAIM_NOTICE_DAYS: z.coerce.number().int().min(1).max(180).default(28),
+  /** Days the client has to pay a submitted payment claim. */
+  PAYMENT_DUE_DAYS: z.coerce.number().int().min(1).max(180).default(30),
+
   /** Delivery days assumed when a supplier does not say. */
   DEFAULT_SUPPLIER_LEAD_DAYS: z.coerce.number().int().min(0).max(60).default(3),
 

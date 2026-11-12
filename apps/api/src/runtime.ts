@@ -15,6 +15,7 @@ import { openDatabase, type DatabaseHandle } from "./db/client.js";
 import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
+import { registerClaimsFeature } from "./features/claims.js";
 import { registerCostFeature } from "./features/cost.js";
 import { registerDocumentsFeature } from "./features/documents.js";
 import { registerPlanningFeature } from "./features/planning.js";
@@ -124,6 +125,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerCostFeature(deps);
   registerPlanningFeature(deps);
   registerDocumentsFeature(deps);
+  registerClaimsFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 
