@@ -6,3 +6,8 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+
+# Local data and credentials
+.data/
+google-service-account.json
+*.service-account.json
