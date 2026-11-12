@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquarePlus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Button, Code, Dialog, Empty, ErrorNote, Field, Input, Loading, Section, Select, Status, Table, Td, Textarea, Th } from "../../components/ui";
@@ -139,6 +139,55 @@ function NewRfiDialog({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
+/** The RFI as a letter, for a consultant who is not on Telegram. */
+function LetterDialog({ rfi, onClose }: { rfi: Rfi | null; onClose: () => void }) {
+  const { project } = useProjectContext();
+  const [copied, setCopied] = useState(false);
+  const letter = useQuery({
+    queryKey: ["project", project.id, "rfi-letter", rfi?.id],
+    queryFn: () => api<{ subject: string; letter: string }>(`/projects/${project.id}/rfis/${rfi!.id}/letter`),
+    enabled: rfi !== null,
+  });
+  const close = () => {
+    setCopied(false);
+    onClose();
+  };
+
+  return (
+    <Dialog open={rfi !== null} onClose={close} title={`RFI ${rfi?.number ?? ""} letter`} width="max-w-xl">
+      <ErrorNote error={letter.error} />
+      {letter.data ? (
+        <div className="flex flex-col gap-4">
+          <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-[4px] border border-rule bg-sunken px-4 py-3 font-sans text-[13px] leading-relaxed">{letter.data.letter}</pre>
+          <p className="text-[12px] text-ink-3">
+            Consultants on Telegram receive this automatically once the RFI is approved. For anyone else, copy it or open it in your email.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              onClick={() =>
+                void navigator.clipboard.writeText(letter.data.letter).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                )
+              }
+            >
+              {copied ? "Copied" : "Copy text"}
+            </Button>
+            <a
+              className="inline-flex h-9 items-center rounded-[4px] bg-ink px-3.5 text-[13px] font-medium text-page hover:opacity-90"
+              href={`mailto:?subject=${encodeURIComponent(letter.data.subject)}&body=${encodeURIComponent(letter.data.letter)}`}
+            >
+              Open in email
+            </a>
+          </div>
+        </div>
+      ) : (
+        <Loading />
+      )}
+    </Dialog>
+  );
+}
+
 function AnswerDialog({ rfi, onClose }: { rfi: Rfi | null; onClose: () => void }) {
   const { project } = useProjectContext();
   const queryClient = useQueryClient();
@@ -186,6 +235,7 @@ export function ClaimsTab() {
   const rfis = useRfis(project.id);
   const [asking, setAsking] = useState(false);
   const [answering, setAnswering] = useState<Rfi | null>(null);
+  const [letterFor, setLetterFor] = useState<Rfi | null>(null);
 
   if (claims.isLoading) return <Loading />;
   return (
@@ -242,6 +292,11 @@ export function ClaimsTab() {
                           Record answer
                         </button>
                       ) : null}
+                      {r.status === "sent" || r.status === "pending_approval" ? (
+                        <button onClick={() => setLetterFor(r)} className="mt-1 block text-[12px] underline-offset-2 hover:underline">
+                          Letter
+                        </button>
+                      ) : null}
                     </Td>
                   </tr>
                 );
@@ -254,6 +309,7 @@ export function ClaimsTab() {
       </Section>
       <NewRfiDialog open={asking} onClose={() => setAsking(false)} />
       <AnswerDialog rfi={answering} onClose={() => setAnswering(null)} />
+      <LetterDialog rfi={letterFor} onClose={() => setLetterFor(null)} />
     </div>
   );
 }

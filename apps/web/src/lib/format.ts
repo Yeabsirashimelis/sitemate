@@ -70,4 +70,5 @@ export const roleLabel: Record<string, string> = {
   supervisor: "Supervisor",
   subcontractor: "Subcontractor",
   supplier: "Supplier",
+  consultant: "Consultant",
 };

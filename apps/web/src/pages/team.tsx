@@ -44,7 +44,7 @@ function AddPersonDialog({ open, onClose }: { open: boolean; onClose: () => void
         <div className="grid grid-cols-2 gap-3">
           <Field label="Role">
             <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-              {(["project_manager", "site_engineer", "supervisor", "subcontractor"] as Role[]).map((r) => (
+              {(["project_manager", "site_engineer", "supervisor", "subcontractor", "consultant"] as Role[]).map((r) => (
                 <option key={r} value={r}>
                   {roleLabel[r]}
                 </option>
@@ -68,7 +68,7 @@ function AddPersonDialog({ open, onClose }: { open: boolean; onClose: () => void
             </Field>
           </div>
         ) : (
-          <p className="text-[13px] text-ink-2">Supervisors and subcontractors only use Telegram. After adding them, send them an invite code.</p>
+          <p className="text-[13px] text-ink-2">Supervisors, subcontractors and the consultant only use Telegram. After adding them, send them an invite code. The consultant receives approved RFIs there and answers them.</p>
         )}
         <ErrorNote error={create.error} />
         <div className="flex justify-end gap-2">

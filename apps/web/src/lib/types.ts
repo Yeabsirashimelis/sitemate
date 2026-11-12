@@ -1,6 +1,6 @@
 /** Shapes of the API responses the dashboard reads. */
 
-export type Role = "owner" | "project_manager" | "site_engineer" | "supervisor" | "subcontractor" | "supplier";
+export type Role = "owner" | "project_manager" | "site_engineer" | "supervisor" | "subcontractor" | "supplier" | "consultant";
 
 export interface User {
   id: string;
@@ -251,6 +251,7 @@ export interface Rfi {
   number: number;
   question: string;
   activityCode: string | null;
+  activityName: string | null;
   status: "draft" | "pending_approval" | "sent" | "answered" | "closed";
   raisedOn: string;
   dueOn: string;
