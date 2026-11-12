@@ -16,6 +16,7 @@ import { EMBEDDING_DIMENSIONS } from "./db/schema.js";
 import { EventBus } from "./events.js";
 import { registerNotifyFeature } from "./features/notify.js";
 import { registerCostFeature } from "./features/cost.js";
+import { registerDocumentsFeature } from "./features/documents.js";
 import { registerPlanningFeature } from "./features/planning.js";
 import { registerProcurementFeature } from "./features/procurement.js";
 import { registerQuotesFeature } from "./features/quotes.js";
@@ -122,6 +123,7 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   registerQuotesFeature(deps);
   registerCostFeature(deps);
   registerPlanningFeature(deps);
+  registerDocumentsFeature(deps);
   scheduler.add("approvals.expire", () => approvals.expireOld());
   scheduler.add("sessions.cleanup", () => deleteExpiredSessions(database.db));
 

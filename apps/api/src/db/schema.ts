@@ -9,6 +9,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  customType,
   bigserial,
   boolean,
   date,
@@ -853,3 +854,20 @@ export const weeklyPlans = pgTable(
   },
   (t) => [uniqueIndex("weekly_plans_project_week_key").on(t.projectId, t.weekStart)],
 );
+
+// ---------------------------------------------------------------------------
+// Document files
+// ---------------------------------------------------------------------------
+
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => "bytea",
+  fromDriver: (value) => (Buffer.isBuffer(value) ? value : Buffer.from(value)),
+});
+
+/** The uploaded file, kept until it has been read and indexed, then removed. */
+export const documentFiles = pgTable("document_files", {
+  documentId: uuid("document_id")
+    .primaryKey()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  data: bytea("data").notNull(),
+});
