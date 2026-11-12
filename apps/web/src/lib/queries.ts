@@ -30,6 +30,7 @@ export const keys = {
   project: (id: string) => ["project", id] as QueryKey,
   schedule: (id: string) => ["project", id, "schedule"] as QueryKey,
   lookahead: (id: string) => ["project", id, "lookahead"] as QueryKey,
+  calendar: (id: string) => ["project", id, "calendar"] as QueryKey,
   measures: (id: string) => ["project", id, "measures"] as QueryKey,
   materials: (id: string) => ["project", id, "materials"] as QueryKey,
   purchases: (id: string) => ["project", id, "purchases"] as QueryKey,
@@ -53,6 +54,14 @@ export const useSchedule = (id: string) =>
   useQuery({ queryKey: keys.schedule(id), queryFn: get<{ schedule: Schedule }>(`/projects/${id}/schedule`), ...LIVE });
 
 export const useLookahead = (id: string) => useQuery({ queryKey: keys.lookahead(id), queryFn: get<Lookahead>(`/projects/${id}/lookahead`), ...LIVE });
+
+export interface CalendarStatus {
+  connected: boolean;
+  events: number;
+  lastSyncedAt: string | null;
+}
+
+export const useCalendarStatus = (id: string) => useQuery({ queryKey: keys.calendar(id), queryFn: get<CalendarStatus>(`/projects/${id}/calendar`) });
 
 export const useMeasures = (id: string) =>
   useQuery({ queryKey: keys.measures(id), queryFn: get<{ measures: RecoveryMeasure[] }>(`/projects/${id}/recovery-measures`) });

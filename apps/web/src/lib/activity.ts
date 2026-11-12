@@ -23,6 +23,7 @@ const ACTIONS: Record<string, string> = {
   "project.updated": "Updated the project settings",
   "telegram.linked": "Linked a Telegram account",
   "cost.recorded": "Recorded a cost",
+  "calendar.synced": "Updated the Google Calendar",
   "user.created": "Added a team member",
   "user.updated": "Updated a team member",
   "company.created": "Set up the company",
@@ -52,6 +53,7 @@ export const AGENT_NAMES: Record<string, string> = {
   planning: "Planning agent",
   documents: "Documents agent",
   claims: "Claims agent",
+  calendar: "Calendar agent",
 };
 
 export type FeedEntry = ActivityFeed["entries"][number];
