@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "seed": "tsx src/seed/cli.ts",
-    "check:gemini": "tsx scripts/check-gemini.ts"
+    "check:gemini": "tsx scripts/check-gemini.ts",
+    "eval": "tsx evals/run.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",
