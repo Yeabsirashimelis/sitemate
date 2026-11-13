@@ -145,6 +145,11 @@ export function checkExtraction(extraction: Extraction, context: SiteContext): C
       continue;
     }
     let percent = Math.round(item.percentComplete * 10) / 10;
+    // "Plastering not started yet" is not progress; keeping it would mark the activity as worked on.
+    if (percent <= 0 && activity.percentComplete === 0 && item.quantityDone === null) {
+      corrections.push(`${activity.code}: mentioned but not started, nothing recorded`);
+      continue;
+    }
     if (percent < activity.percentComplete) {
       corrections.push(`${activity.code}: kept ${activity.percentComplete}% instead of lower ${percent}%`);
       percent = activity.percentComplete;

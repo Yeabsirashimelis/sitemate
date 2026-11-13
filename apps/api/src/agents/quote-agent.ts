@@ -24,6 +24,7 @@ export function quotePrompt(input: { supplier: string; open: Array<{ reference: 
   return [
     "You read replies from building material suppliers in Ethiopia to a contractor's request for a price. Replies may be in English or Amharic and may use informal wording like '4200 birr per bag, 2 days'.",
     "Extract the quote exactly as written. Do not convert currencies or units and do not invent values.",
+    "A reply that is only a number, like '1150', answers the request: it is the price per unit of the requested material, in birr.",
     `Supplier: ${input.supplier}`,
     "Open requests sent to this supplier:",
     ...input.open.map((o) => `- ${o.reference}: ${o.quantity} ${o.unit} of ${o.material}`),

@@ -56,6 +56,15 @@ describe("checkExtraction", () => {
     ]);
   });
 
+  it("does not record an activity that is only mentioned as not started", () => {
+    const checked = checkExtraction(
+      { ...base, progress: [{ activityCode: "A30", percentComplete: 0, quantityDone: null, note: "not started yet" }] },
+      context,
+    );
+    expect(checked.progress).toEqual([]);
+    expect(checked.corrections).toEqual(["A30: mentioned but not started, nothing recorded"]);
+  });
+
   it("matches material names to tracked materials and merges repeats", () => {
     const checked = checkExtraction(
       {
