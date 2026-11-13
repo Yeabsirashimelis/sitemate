@@ -84,6 +84,7 @@ export function systemPrompt(context: SiteContext): string {
     "- A delay is anything that stopped or slowed planned work: late delivery, missing drawings, rain, no workers, broken equipment.",
     "- Photos are evidence. Flag a photo only when it clearly contradicts the report or shows a clear safety problem such as no helmets or an open edge without a guardrail.",
     "- Ask a follow-up question only if something important is missing, such as which activity was worked on, the number of workers, or how much was done. Ask about one thing.",
+    "- Never ask for activity codes, quantities of work the supervisor already called finished, or anything else from the schedule; supervisors do not know those, and you can look them up in the list. If the report covers what was done, who worked and what materials moved, set followUpQuestion to null.",
     `- Write followUpQuestion in ${language}, short and polite, the way a site coordinator would ask on Telegram. Everything else is in English.`,
     "",
     "Respond with JSON only.",
