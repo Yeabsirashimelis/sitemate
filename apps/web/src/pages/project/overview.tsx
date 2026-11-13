@@ -71,9 +71,9 @@ export function OverviewTab() {
             <Figure label="Cost performance" value={perfIndex(summary?.cpi)} tone={indexTone(summary?.cpi)} note="Earned vs spent" />
             <Figure
               label="Materials"
-              value={materials.data?.materials.length === 0 ? "None yet" : toOrder.length ? `${number(toOrder.length)} to order` : short.length ? `${number(short.length)} requested` : "Covered"}
+              value={materials.data?.materials.length === 0 ? "None yet" : toOrder.length ? `${number(toOrder.length)} to order` : short.length ? `${number(short.length)} open` : "Covered"}
               tone={materials.data?.materials.length === 0 ? "neutral" : toOrder.some((m) => m.status === "order_now") ? "critical" : toOrder.length ? "warning" : short.length ? "info" : "good"}
-              note={materials.data?.materials.length === 0 ? "Add them on the Materials tab" : short.length && !toOrder.length ? "Waiting for approval or delivery" : undefined}
+              note={materials.data?.materials.length === 0 ? "Add them on the Materials tab" : short.length && !toOrder.length ? "Purchase requested, waiting for approval or delivery" : undefined}
             />
             <Figure
               label="Claims file"
