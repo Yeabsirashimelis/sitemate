@@ -219,7 +219,12 @@ export class TelegramBot {
     return row?.project ?? null;
   }
 
-  /** Sends a message and records it. Users without a linked Telegram account are skipped. */
+  /**
+   * Sends a message and records it. Users without a linked Telegram account
+   * are skipped. A network failure is retried once and then logged rather
+   * than thrown: the work behind the message is already saved, and failing
+   * the job would only make it run again.
+   */
   async sendToUser(
     user: Pick<User, "id" | "companyId" | "telegramChatId">,
     text: string,
@@ -229,7 +234,18 @@ export class TelegramBot {
       this.logger.warn({ userId: user.id }, "User has no Telegram chat, message not sent");
       return null;
     }
-    const sent = await this.api.sendMessage(user.telegramChatId, text, options);
+    const chatId = user.telegramChatId;
+    const send = () => this.api.sendMessage(chatId, text, options);
+    const sent = await send()
+      .catch(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return send();
+      })
+      .catch((error: unknown) => {
+        this.logger.error({ err: error, userId: user.id }, "Telegram message could not be sent");
+        return null;
+      });
+    if (!sent) return null;
     await this.db.insert(messages).values({
       companyId: user.companyId,
       projectId: options.projectId ?? null,

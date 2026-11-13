@@ -111,7 +111,7 @@ Fully correct means the worker count, the activities, percent complete (within 1
 | Integrations | Google Calendar through a service account, Open-Meteo weather, open exchange rates |
 | Auth | Own implementation: scrypt password hashes, hashed session tokens, roles, rate limiting |
 | Dashboard | React 19, Vite 7, Tailwind CSS 4, React Router 7, TanStack Query 5. Gantt chart and S-curve drawn in SVG |
-| Quality | Vitest (207 tests), GitHub Actions for CI |
+| Quality | Vitest (208 tests), GitHub Actions for CI |
 | Hosting | Vercel (dashboard), Render (API and bot), Neon (database) |
 
 ## Repository layout
@@ -189,7 +189,7 @@ Durations are in workdays. Predecessors are separated by `;` and may carry a lin
 bash scripts/verify.sh
 ```
 
-This builds the engine, typechecks all three packages and runs the tests: 28 for the engine, 171 for the API and 8 for the dashboard. API tests run against a fresh in-memory Postgres with fake Gemini, Telegram, weather and calendar clients, so they need no keys and no network. CI runs the same script on every push.
+This builds the engine, typechecks all three packages and runs the tests: 28 for the engine, 172 for the API and 8 for the dashboard. API tests run against a fresh in-memory Postgres with fake Gemini, Telegram, weather and calendar clients, so they need no keys and no network. CI runs the same script on every push.
 
 ## Deployment
 

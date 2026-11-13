@@ -3,9 +3,9 @@ import { and, desc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { LlmError } from "../src/ai/llm.js";
-import { activities, dailyLogs, materials, materialTransactions, projects, scheduleSnapshots } from "../src/db/schema.js";
+import { activities, dailyLogs, materials, materialTransactions, messages, projects, scheduleSnapshots } from "../src/db/schema.js";
 import { queueDueCheckIns } from "../src/features/site.js";
-import { JobRunner } from "../src/jobs/queue.js";
+import { enqueue, JobRunner } from "../src/jobs/queue.js";
 import { receiveUpdate, TELEGRAM_UPDATE_JOB } from "../src/telegram/bot.js";
 import { createTestApp, type TestApp } from "./helpers/app.js";
 import { deliver, setupSiteProject } from "./helpers/fixtures.js";
@@ -183,6 +183,34 @@ describe("daily site loop", () => {
       ["delivery", 500],
       ["usage", 40],
     ]);
+  });
+
+  it("keeps a saved log when Telegram is unreachable, and never reads the same report twice", async () => {
+    const site = await setupSiteProject(t);
+    t.llm.when(SITE, fullDay);
+    const send = t.telegram.sendMessage.bind(t.telegram);
+    let failing = false;
+    t.telegram.sendMessage = async (...args) => {
+      if (failing) throw new TypeError("fetch failed: ETIMEDOUT");
+      return send(...args);
+    };
+    try {
+      const before = t.llm.requests.length;
+      failing = true; // nothing gets through to the supervisor
+      await deliver(t, textUpdate(site.supervisor.telegramId, "Excavation done, foundations about half. 8 masons 12 labourers."));
+      const log = await logFor(site.projectId);
+      expect(log.status).toBe("complete");
+      expect(t.llm.requests.length).toBe(before + 1);
+
+      // The same job again, as a retry would run it: nothing is read a second time.
+      const [last] = await t.handle.db.select().from(messages).where(eq(messages.dailyLogId, log.id)).orderBy(desc(messages.createdAt)).limit(1);
+      await enqueue(t.handle.db, "site.process", { dailyLogId: log.id, messageId: last!.id }, { idempotencyKey: `retry:${log.id}` });
+      await t.runtime.runner.drain({ now: new Date(Date.now() + 120_000) });
+      expect(t.llm.requests.length).toBe(before + 1);
+      expect((await logFor(site.projectId)).status).toBe("complete");
+    } finally {
+      t.telegram.sendMessage = send;
+    }
   });
 
   it("tells the supervisor once when the update cannot be processed", async () => {

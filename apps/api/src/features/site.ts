@@ -80,7 +80,12 @@ export function registerSiteFeature(deps: FeatureDeps): void {
     schema: z.object({ dailyLogId: z.uuid(), messageId: z.uuid() }),
     handle: async ({ dailyLogId, messageId }) => {
       const received = await logMessages(db, dailyLogId);
-      if (received.at(-1)?.id !== messageId) return; // a later message will trigger processing
+      const last = received.at(-1);
+      if (last?.id !== messageId) return; // a later message will trigger processing
+      // A retried job must not read the report again once it has been handled:
+      // a second reading can disagree with the first and reopen a finished log.
+      const [log] = await db.select().from(dailyLogs).where(eq(dailyLogs.id, dailyLogId));
+      if (log && log.status !== "collecting" && log.updatedAt >= last.createdAt) return;
       await processLog(deps, dailyLogId);
     },
   });
