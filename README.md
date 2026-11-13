@@ -83,6 +83,21 @@ flowchart LR
 
 **Background work runs on Postgres.** Jobs are rows claimed with `FOR UPDATE SKIP LOCKED`, retried with backoff, protected against duplicates with idempotency keys and given a time limit. There is no Redis or other queue to run.
 
+## How well it reads
+
+The reading is measured, not assumed. `apps/api/evals` holds 30 site reports and 12 supplier replies written the way they actually arrive: plain English, phone shorthand with typos, Amharic, Amharic mixed with English, and cases that trip people up (a supervisor correcting themselves, the same workers counted twice, work that is not in the schedule, a safety near miss). Each has the answer a careful project engineer would take from it. The runner sends them through the same prompt, schema and checks as production and scores the result.
+
+| | Cases | Fully correct |
+|---|---:|---:|
+| English | 8 | 8 |
+| English, informal | 6 | 6 |
+| Amharic | 8 | 8 |
+| Amharic and English mixed | 3 | 3 |
+| Hard cases | 5 | 5 |
+| Supplier prices | 12 | 12 |
+
+Fully correct means the worker count, the activities, percent complete (within 10 points), materials used and received, and every problem that should be flagged all match. The first run found two real mistakes: an activity mentioned as "not started yet" was recorded as worked on, and a supplier who replied with just a price ("1150") was not understood. Both were fixed in code and the prompt, and the set now passes in full. It is a small set, so read this as "these cases pass", not "it is never wrong". Full results are in [`apps/api/evals/RESULTS.md`](apps/api/evals/RESULTS.md); run them with `pnpm --filter @sitemate/api eval`.
+
 ## Tech stack
 
 | Area | Choice |
@@ -96,7 +111,7 @@ flowchart LR
 | Integrations | Google Calendar through a service account, Open-Meteo weather, open exchange rates |
 | Auth | Own implementation: scrypt password hashes, hashed session tokens, roles, rate limiting |
 | Dashboard | React 19, Vite 7, Tailwind CSS 4, React Router 7, TanStack Query 5. Gantt chart and S-curve drawn in SVG |
-| Quality | Vitest (206 tests), GitHub Actions for CI |
+| Quality | Vitest (207 tests), GitHub Actions for CI |
 | Hosting | Vercel (dashboard), Render (API and bot), Neon (database) |
 
 ## Repository layout
@@ -174,7 +189,7 @@ Durations are in workdays. Predecessors are separated by `;` and may carry a lin
 bash scripts/verify.sh
 ```
 
-This builds the engine, typechecks all three packages and runs the tests: 28 for the engine, 170 for the API and 8 for the dashboard. API tests run against a fresh in-memory Postgres with fake Gemini, Telegram, weather and calendar clients, so they need no keys and no network. CI runs the same script on every push.
+This builds the engine, typechecks all three packages and runs the tests: 28 for the engine, 171 for the API and 8 for the dashboard. API tests run against a fresh in-memory Postgres with fake Gemini, Telegram, weather and calendar clients, so they need no keys and no network. CI runs the same script on every push.
 
 ## Deployment
 
