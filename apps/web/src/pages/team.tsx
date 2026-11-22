@@ -132,7 +132,8 @@ export function TeamPage() {
   const can = useCan();
   const [adding, setAdding] = useState(false);
   const [inviting, setInviting] = useState<User | null>(null);
-  const users = (data?.users ?? []).filter((u) => u.role !== "supplier");
+  // Active people first; people who were switched off stay listed for the record.
+  const users = (data?.users ?? []).filter((u) => u.role !== "supplier").sort((a, b) => Number(b.active) - Number(a.active));
 
   return (
     <div className="flex flex-col gap-6">
@@ -163,13 +164,13 @@ export function TeamPage() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id}>
+              <tr key={u.id} className={u.active ? undefined : "opacity-55"}>
                 <Td className="font-medium">{u.name}</Td>
                 <Td>{roleLabel[u.role]}</Td>
                 <Td className="text-ink-2">{u.email ?? "Telegram only"}</Td>
-                <Td>{u.telegramUserId ? <Status tone="good">Linked</Status> : <Status tone="neutral">Not linked</Status>}</Td>
+                <Td>{!u.active ? <Status tone="neutral">Inactive</Status> : u.telegramUserId ? <Status tone="good">Linked</Status> : <Status tone="neutral">Not linked</Status>}</Td>
                 <Td align="right">
-                  {can.manage && !u.telegramUserId ? (
+                  {can.manage && u.active && !u.telegramUserId ? (
                     <Button size="sm" variant="ghost" icon={<Send className="size-3.5" />} onClick={() => setInviting(u)}>
                       Invite code
                     </Button>

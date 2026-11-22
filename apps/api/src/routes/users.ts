@@ -119,10 +119,12 @@ export function userRoutes(app: FastifyInstance, db: Database, config: Config): 
     const actor = requireRole(request, MANAGER_ROLES);
     const { id } = idParams.parse(request.params);
     const [target] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, active: users.active })
       .from(users)
       .where(and(eq(users.id, id), eq(users.companyId, actor.companyId)));
     if (!target) throw notFound("User");
+    // A code for someone switched off would link Telegram to an account the bot then ignores.
+    if (!target.active) throw badRequest("This person is no longer active");
 
     const code = inviteCode();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
