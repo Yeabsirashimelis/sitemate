@@ -173,6 +173,16 @@ describe("team management", () => {
     expect(invite.statusCode).toBe(404);
   });
 
+  it("gives no Telegram code to someone who has been switched off", async () => {
+    const { auth } = await registerCompany(t.app);
+    const created = await t.app.inject({ method: "POST", url: "/users", headers: auth, payload: { name: "Former supervisor", role: "supervisor" } });
+    const id = created.json().user.id;
+    await t.app.inject({ method: "PATCH", url: `/users/${id}`, headers: auth, payload: { active: false } });
+    const invite = await t.app.inject({ method: "POST", url: `/users/${id}/telegram-invite`, headers: auth });
+    expect(invite.statusCode).toBe(400);
+    expect(invite.json().error.message).toBe("This person is no longer active");
+  });
+
   it("does not let owners lock themselves out", async () => {
     const { auth, user } = await registerCompany(t.app);
     const response = await t.app.inject({ method: "PATCH", url: `/users/${user.id}`, headers: auth, payload: { active: false } });
