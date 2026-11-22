@@ -3,7 +3,8 @@ import { Download, FileUp } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../lib/api";
-import { Button, Dialog, ErrorNote, Field, Input, Select, cx } from "./ui";
+import { birrCompact, longDate, plural } from "../lib/format";
+import { Button, Dialog, ErrorNote, Field, Input, Select, Textarea, cx } from "./ui";
 
 /** A small G+1 house, enough to see the critical path and the look-ahead work. */
 export const SAMPLE_SCHEDULE_CSV = [
@@ -216,6 +217,152 @@ export function NewProjectDialog({ open, onClose }: { open: boolean; onClose: ()
 
 /** Shown where a project has no schedule yet. */
 export function ScheduleImport({ projectId }: { projectId: string }) {
+  const [mode, setMode] = useState<"describe" | "csv">("describe");
+  const tab = (value: typeof mode, label: string) => (
+    <button
+      type="button"
+      onClick={() => setMode(value)}
+      className={cx("border-b-2 pb-1.5 text-[13px] font-medium", mode === value ? "border-ink text-ink" : "border-transparent text-ink-3 hover:text-ink-2")}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="rounded-[6px] border border-dashed border-rule-strong px-6 py-8">
+      <div className="mb-5 flex gap-5">
+        {tab("describe", "Describe the building")}
+        {tab("csv", "Import a CSV")}
+      </div>
+      {mode === "describe" ? <ScheduleBuilder projectId={projectId} /> : <CsvScheduleImport projectId={projectId} />}
+    </div>
+  );
+}
+
+interface BuildingParameters {
+  floors: number;
+  floorArea: number;
+  basement: boolean;
+  roof: "steel" | "concrete";
+  externalWorks: boolean;
+  blockName: string;
+}
+
+interface ScheduleDraft {
+  parameters: BuildingParameters;
+  summary: string;
+  assumptions: string[];
+  activities: number;
+  finishDate: string;
+  estimatedCost: number;
+}
+
+/** No schedule yet: describe the building in a sentence, check the numbers, use the programme. */
+function ScheduleBuilder({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const [description, setDescription] = useState("");
+  const [draft, setDraft] = useState<ScheduleDraft | null>(null);
+  const [params, setParams] = useState<BuildingParameters | null>(null);
+
+  const read = useMutation({
+    mutationFn: (body: { description: string } | { parameters: BuildingParameters }) => api<ScheduleDraft>(`/projects/${projectId}/schedule/draft`, { method: "POST", body }),
+    onSuccess: (result) => {
+      setDraft(result);
+      setParams(result.parameters);
+    },
+  });
+  const build = useMutation({
+    mutationFn: () => api(`/projects/${projectId}/schedule/build`, { method: "POST", body: { parameters: params } }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["project", projectId] }),
+  });
+  const change = (patch: Partial<BuildingParameters>) => {
+    const next = { ...params!, ...patch };
+    setParams(next);
+    if (next.floorArea >= 40 && next.floorArea <= 5000 && next.floors >= 0 && next.floors <= 20) read.mutate({ parameters: next });
+  };
+
+  return (
+    <div>
+      <h2 className="text-[15px] font-semibold">Let SiteMate draft the schedule</h2>
+      <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-ink-2">
+        Describe the building the way you would to a colleague. SiteMate lays out a reinforced concrete frame programme from it, with a bill of quantities at typical
+        Addis rates. You check the numbers before anything is saved, and can change any activity later.
+      </p>
+      <form
+        className="mt-4 flex max-w-[62ch] flex-col gap-3"
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          read.mutate({ description: description.trim() });
+        }}
+      >
+        <Textarea
+          rows={3}
+          placeholder="G+4 apartment building in Bole, about 400 m² per floor, one basement for parking, flat concrete roof."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <div>
+          <Button variant="secondary" size="sm" type="submit" disabled={description.trim().length < 10} busy={read.isPending && !draft}>
+            Draft the schedule
+          </Button>
+        </div>
+      </form>
+      <div className="mt-3">
+        <ErrorNote error={read.error} />
+      </div>
+
+      {draft && params ? (
+        <div className="mt-6 max-w-[62ch] border-t border-rule pt-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Field label="Floors above ground">
+              <Input type="number" min={0} max={20} value={params.floors} onChange={(e) => change({ floors: Number(e.target.value) })} />
+            </Field>
+            <Field label="Area per floor, m²">
+              <Input type="number" min={40} max={5000} value={params.floorArea} onChange={(e) => change({ floorArea: Number(e.target.value) })} />
+            </Field>
+            <Field label="Roof">
+              <Select value={params.roof} onChange={(e) => change({ roof: e.target.value as BuildingParameters["roof"] })}>
+                <option value="steel">Steel and sheeting</option>
+                <option value="concrete">Flat concrete</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-5 text-[13px]">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={params.basement} onChange={(e) => change({ basement: e.target.checked })} /> Basement
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={params.externalWorks} onChange={(e) => change({ externalWorks: e.target.checked })} /> External works in the contract
+            </label>
+          </div>
+
+          {draft.assumptions.length > 0 ? (
+            <ul className="mt-4 flex flex-col gap-1 text-[12px] leading-relaxed text-ink-2">
+              {draft.assumptions.map((a) => (
+                <li key={a}>{a} Change it above if that is wrong.</li>
+              ))}
+            </ul>
+          ) : null}
+
+          <p className="mt-4 text-[13px] leading-relaxed">
+            <span className="font-medium">{plural(draft.activities, "activity", "activities")}</span>, finishing around{" "}
+            <span className="font-medium">{longDate(draft.finishDate)}</span>, measured work about <span className="font-medium">{birrCompact(draft.estimatedCost)}</span>.
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <Button variant="primary" size="sm" busy={build.isPending} disabled={read.isPending} onClick={() => build.mutate()}>
+              Use this schedule
+            </Button>
+            {read.isPending ? <span className="text-[12px] text-ink-3">Updating…</span> : null}
+          </div>
+          <div className="mt-3">
+            <ErrorNote error={build.error} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CsvScheduleImport({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const upload = useMutation({
@@ -224,7 +371,7 @@ export function ScheduleImport({ projectId }: { projectId: string }) {
   });
 
   return (
-    <div className="rounded-[6px] border border-dashed border-rule-strong px-6 py-8">
+    <div>
       <h2 className="text-[15px] font-semibold">Import the schedule</h2>
       <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-ink-2">
         A CSV with one row per activity: code, name, duration in workdays and predecessors. Kind, zone, unit and quantity are optional but let SiteMate track
