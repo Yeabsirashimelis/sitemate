@@ -18,6 +18,7 @@ import { overviewRoutes } from "./routes/overview.js";
 import { documentRoutes } from "./routes/documents.js";
 import { calendarRoutes } from "./routes/calendar.js";
 import { sampleRoutes } from "./routes/sample.js";
+import { scheduleBuilderRoutes } from "./routes/schedule-builder.js";
 import { purchaseRoutes } from "./routes/purchases.js";
 import { authRoutes } from "./routes/auth.js";
 import { materialRoutes } from "./routes/materials.js";
@@ -105,6 +106,7 @@ export async function buildApp({
       documentRoutes(app, db, services.deps, () => services.deps.runner.poke());
       calendarRoutes(app, db, services.deps);
       sampleRoutes(app, services.deps);
+      scheduleBuilderRoutes(app, services.deps);
       purchaseRoutes(app, services.deps);
     }
   }
