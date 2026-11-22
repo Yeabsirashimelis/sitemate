@@ -57,7 +57,13 @@ export const useSchedule = (id: string) =>
 export const useLookahead = (id: string) => useQuery({ queryKey: keys.lookahead(id), queryFn: get<Lookahead>(`/projects/${id}/lookahead`), ...LIVE });
 
 export interface CalendarStatus {
+  /** The server can write to Google at all. */
+  available: boolean;
+  /** This company has connected its own calendar. */
   connected: boolean;
+  calendarId: string | null;
+  /** The address the calendar has to be shared with. */
+  shareWith: string | null;
   events: number;
   lastSyncedAt: string | null;
 }

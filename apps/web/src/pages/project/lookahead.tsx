@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays } from "lucide-react";
-import { Button, Code, Empty, ErrorNote, Loading, Section, Status, StatusIcon, Table, Td, Th, cx } from "../../components/ui";
+import { Button, Code, Empty, ErrorNote, Input, Loading, Section, Status, StatusIcon, Table, Td, Th, cx } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useCan } from "../../lib/auth";
 import { dayDate, longDate, plural, relativeTime, shortDate } from "../../lib/format";
@@ -125,31 +126,97 @@ function CalendarSync({ projectId }: { projectId: string }) {
   const status = useCalendarStatus(projectId);
   const can = useCan();
   const queryClient = useQueryClient();
+  const [calendarId, setCalendarId] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: keys.calendar(projectId) });
+    // The server fills or empties the calendar in the background.
+    setTimeout(() => void queryClient.invalidateQueries({ queryKey: keys.calendar(projectId) }), 4000);
+  };
   const sync = useMutation({
     mutationFn: () => api(`/projects/${projectId}/calendar/sync`, { method: "POST" }),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: keys.calendar(projectId) }),
+    onSettled: refresh,
   });
-  if (!status.data) return null;
+  const connect = useMutation({
+    mutationFn: (id: string | null) => api("/company/calendar", { method: "PUT", body: { calendarId: id } }),
+    onSuccess: () => {
+      setConnecting(false);
+      setCalendarId("");
+      refresh();
+    },
+  });
+  const data = status.data;
+  if (!data || !data.available) return null;
+
+  const form = (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        connect.mutate(calendarId.trim());
+      }}
+      className="flex flex-col gap-3"
+    >
+      <ol className="flex list-decimal flex-col gap-1.5 pl-4 text-[12px] leading-relaxed text-ink-2">
+        <li>In Google Calendar, create a calendar for your projects (Settings, Add calendar).</li>
+        <li>
+          Under <span className="font-medium">Share with specific people</span>, add{" "}
+          <span className="break-all font-mono text-[11px] text-ink">{data.shareWith}</span> and choose{" "}
+          <span className="font-medium">Make changes and see all event details</span>.
+        </li>
+        <li>
+          Copy the <span className="font-medium">Calendar ID</span> from Integrate calendar and paste it here.
+        </li>
+      </ol>
+      <Input required placeholder="…@group.calendar.google.com" value={calendarId} onChange={(e) => setCalendarId(e.target.value)} />
+      <ErrorNote error={connect.error} />
+      <div className="flex gap-2">
+        <Button size="sm" variant="primary" type="submit" busy={connect.isPending}>
+          Connect
+        </Button>
+        {data.connected ? (
+          <Button size="sm" variant="ghost" type="button" onClick={() => setConnecting(false)}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+    </form>
+  );
+
   return (
     <Section title="Google Calendar">
-      {status.data.connected ? (
+      {data.connected && !connecting ? (
         <>
           <p className="flex items-start gap-2 text-[13px] leading-relaxed text-ink-2">
             <CalendarDays className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden />
             <span>
-              {plural(status.data.events, "event")} on the team calendar: these activities, order-by dates, notice deadlines and RFI answers due.
-              {status.data.lastSyncedAt ? ` Last change sent ${relativeTime(status.data.lastSyncedAt)}.` : ""}
+              {plural(data.events, "event")} on your calendar: these activities, order-by dates, notice deadlines and RFI answers due.
+              {data.lastSyncedAt ? ` Last change sent ${relativeTime(data.lastSyncedAt)}.` : ""}
             </span>
           </p>
           {can.manage ? (
-            <Button size="sm" variant="secondary" className="mt-3" busy={sync.isPending} onClick={() => sync.mutate()}>
-              Sync now
-            </Button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="secondary" busy={sync.isPending} onClick={() => sync.mutate()}>
+                Sync now
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConnecting(true)}>
+                Change calendar
+              </Button>
+              <Button size="sm" variant="ghost" busy={connect.isPending} onClick={() => connect.mutate(null)}>
+                Disconnect
+              </Button>
+            </div>
           ) : null}
-          <ErrorNote error={sync.error} />
+          <ErrorNote error={sync.error ?? connect.error} />
+        </>
+      ) : can.manage ? (
+        <>
+          {!data.connected ? (
+            <p className="mb-3 text-[13px] leading-relaxed text-ink-2">Put the look-ahead, order-by dates and deadlines on your team's Google Calendar, kept up to date after every site report.</p>
+          ) : null}
+          {form}
         </>
       ) : (
-        <p className="text-[13px] leading-relaxed text-ink-3">Not connected. Set GOOGLE_CALENDAR_ID on the server to put the look-ahead and deadlines on the team calendar.</p>
+        <p className="text-[13px] leading-relaxed text-ink-3">Not connected. A project manager can connect the team's Google Calendar here.</p>
       )}
     </Section>
   );
