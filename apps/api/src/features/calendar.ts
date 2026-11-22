@@ -7,10 +7,10 @@
 
 import { createHash } from "node:crypto";
 import { addCalendarDays } from "@sitemate/engine";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { audit } from "../audit.js";
-import { calendarEvents, claimEvents, projects, rfis } from "../db/schema.js";
+import { calendarEvents, claimEvents, companies, projects, rfis } from "../db/schema.js";
 import { longDate, plural } from "../domain/format.js";
 import { localDate } from "../domain/time.js";
 import type { CalendarEvent } from "../integrations/google-calendar.js";
@@ -30,6 +30,7 @@ const COLOR = { blocked: "11", atRisk: "5", critical: "9", other: "8", deadline:
 export function registerCalendarFeature(deps: FeatureDeps): void {
   if (!deps.calendar) return;
   deps.scheduler.add("calendar.hourly-sync", () => queueCalendarSyncs(deps));
+  deps.scheduler.add("calendar.cleanup", () => removeOrphanEvents(deps));
   deps.runner.register(CALENDAR_SYNC_JOB, {
     schema: z.object({ projectId: z.uuid() }),
     handle: async ({ projectId }) => {
@@ -42,10 +43,32 @@ export function registerCalendarFeature(deps: FeatureDeps): void {
   });
 }
 
-/** Queues one sync per active project per hour. */
+/** Events written before calendars were per company carry no calendar id; they went to the configured default. */
+function eventCalendar(deps: FeatureDeps, sent: { calendarId: string | null }): string | null {
+  return sent.calendarId ?? (deps.config.GOOGLE_CALENDAR_ID || null);
+}
+
+/** Takes events of deleted projects off the calendar they were written to. */
+export async function removeOrphanEvents(deps: FeatureDeps): Promise<number> {
+  const { db, calendar } = deps;
+  if (!calendar) return 0;
+  const orphans = await db.select().from(calendarEvents).where(isNull(calendarEvents.projectId)).limit(200);
+  for (const orphan of orphans) {
+    const sentTo = eventCalendar(deps, orphan);
+    if (sentTo) await calendar.remove(sentTo, orphan.googleEventId);
+    await db.delete(calendarEvents).where(eq(calendarEvents.id, orphan.id));
+  }
+  return orphans.length;
+}
+
+/** Queues one sync per hour for each active project of a company with a calendar connected. */
 export async function queueCalendarSyncs(deps: FeatureDeps): Promise<number> {
   const hour = deps.now().toISOString().slice(0, 13);
-  const active = await deps.db.select({ id: projects.id }).from(projects).where(eq(projects.active, true));
+  const active = await deps.db
+    .select({ id: projects.id })
+    .from(projects)
+    .innerJoin(companies, eq(companies.id, projects.companyId))
+    .where(and(eq(projects.active, true), isNotNull(companies.googleCalendarId)));
   let queued = 0;
   for (const project of active) {
     if ((await enqueue(deps.db, CALENDAR_SYNC_JOB, { projectId: project.id }, { idempotencyKey: `calendar:${project.id}:${hour}` })) !== null) queued++;
@@ -63,34 +86,44 @@ export interface SyncResult {
 export async function syncProjectCalendar(deps: FeatureDeps, projectId: string): Promise<SyncResult | null> {
   const { db, calendar } = deps;
   if (!calendar) return null;
-  const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-  if (!project) return null;
+  const [row] = await db
+    .select({ project: projects, calendarId: companies.googleCalendarId })
+    .from(projects)
+    .innerJoin(companies, eq(companies.id, projects.companyId))
+    .where(eq(projects.id, projectId));
+  if (!row) return null;
+  const { project, calendarId } = row;
 
-  const wanted = project.active ? await desiredEvents(deps, project) : new Map<string, CalendarEvent>();
-  const existing = new Map((await db.select().from(calendarEvents).where(eq(calendarEvents.projectId, projectId))).map((row) => [row.key, row]));
+  // No calendar connected, or the project closed: whatever was sent before comes off.
+  const wanted = project.active && calendarId ? await desiredEvents(deps, project) : new Map<string, CalendarEvent>();
+  const existing = new Map((await db.select().from(calendarEvents).where(eq(calendarEvents.projectId, projectId))).map((r) => [r.key, r]));
   const result: SyncResult = { created: 0, updated: 0, removed: 0, unchanged: 0 };
 
   for (const [key, event] of wanted) {
     const hash = createHash("sha256").update(JSON.stringify(event)).digest("hex");
-    const row = existing.get(key);
-    if (row?.contentHash === hash) {
+    const sent = existing.get(key);
+    const sentTo = sent ? eventCalendar(deps, sent) : null;
+    if (sent && sentTo === calendarId && sent.contentHash === hash) {
       result.unchanged++;
       continue;
     }
-    const googleEventId = row?.googleEventId ?? eventId(projectId, key);
-    await calendar.upsert(googleEventId, event);
+    // The company switched calendars: take the event off the old one first.
+    if (sent && sentTo && sentTo !== calendarId) await calendar.remove(sentTo, sent.googleEventId);
+    const googleEventId = sent?.googleEventId ?? eventId(projectId, key);
+    await calendar.upsert(calendarId!, googleEventId, event);
     await db
       .insert(calendarEvents)
-      .values({ projectId, key, googleEventId, contentHash: hash, syncedAt: deps.now() })
-      .onConflictDoUpdate({ target: [calendarEvents.projectId, calendarEvents.key], set: { contentHash: hash, syncedAt: deps.now() } });
-    if (row) result.updated++;
+      .values({ projectId, calendarId, key, googleEventId, contentHash: hash, syncedAt: deps.now() })
+      .onConflictDoUpdate({ target: [calendarEvents.projectId, calendarEvents.key], set: { calendarId, contentHash: hash, syncedAt: deps.now() } });
+    if (sent) result.updated++;
     else result.created++;
   }
 
-  for (const [key, row] of existing) {
+  for (const [key, sent] of existing) {
     if (wanted.has(key)) continue;
-    await calendar.remove(row.googleEventId);
-    await db.delete(calendarEvents).where(eq(calendarEvents.id, row.id));
+    const sentTo = eventCalendar(deps, sent);
+    if (sentTo) await calendar.remove(sentTo, sent.googleEventId);
+    await db.delete(calendarEvents).where(eq(calendarEvents.id, sent.id));
     result.removed++;
   }
 

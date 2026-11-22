@@ -13,10 +13,14 @@ export interface CalendarEvent {
 }
 
 export interface CalendarProvider {
+  /** The address a calendar has to be shared with before SiteMate can write to it. */
+  readonly accountEmail: string;
   /** Creates the event with this id, or replaces it if it already exists. */
-  upsert(eventId: string, event: CalendarEvent): Promise<void>;
+  upsert(calendarId: string, eventId: string, event: CalendarEvent): Promise<void>;
   /** Deletes the event. An event that is already gone is not an error. */
-  remove(eventId: string): Promise<void>;
+  remove(calendarId: string, eventId: string): Promise<void>;
+  /** Whether the calendar exists and has been shared with SiteMate. */
+  canWrite(calendarId: string): Promise<boolean>;
 }
 
 const serviceAccount = z.object({
@@ -52,11 +56,23 @@ export class GoogleCalendar implements CalendarProvider {
 
   constructor(
     private readonly account: ServiceAccount,
-    private readonly calendarId: string,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async upsert(eventId: string, event: CalendarEvent): Promise<void> {
+  get accountEmail(): string {
+    return this.account.client_email;
+  }
+
+  async canWrite(calendarId: string): Promise<boolean> {
+    // Listing one event needs the same sharing as writing; nothing is changed.
+    const response = await this.request(calendarId, "GET", "/events?maxResults=1");
+    if (response.ok) return true;
+    if (response.status === 403 || response.status === 404) return false;
+    await this.check(response);
+    return false;
+  }
+
+  async upsert(calendarId: string, eventId: string, event: CalendarEvent): Promise<void> {
     const body = {
       id: eventId,
       summary: event.summary,
@@ -67,21 +83,21 @@ export class GoogleCalendar implements CalendarProvider {
       transparency: "transparent",
       ...(event.colorId ? { colorId: event.colorId } : {}),
     };
-    const updated = await this.request("PUT", `/events/${eventId}`, body);
+    const updated = await this.request(calendarId, "PUT", `/events/${eventId}`, body);
     if (updated.status !== 404) return this.check(updated);
     // Not there yet: create it with our id. A 409 means a parallel sync won the race.
-    const created = await this.request("POST", "/events", body);
+    const created = await this.request(calendarId, "POST", "/events", body);
     if (created.status !== 409) await this.check(created);
   }
 
-  async remove(eventId: string): Promise<void> {
-    const response = await this.request("DELETE", `/events/${eventId}`);
+  async remove(calendarId: string, eventId: string): Promise<void> {
+    const response = await this.request(calendarId, "DELETE", `/events/${eventId}`);
     if (response.status === 404 || response.status === 410) return;
     await this.check(response);
   }
 
-  private async request(method: string, path: string, body?: unknown): Promise<Response> {
-    const url = `${API}/calendars/${encodeURIComponent(this.calendarId)}${path}`;
+  private async request(calendarId: string, method: string, path: string, body?: unknown): Promise<Response> {
+    const url = `${API}/calendars/${encodeURIComponent(calendarId)}${path}`;
     return this.fetchImpl(url, {
       method,
       headers: { authorization: `Bearer ${await this.accessToken()}`, ...(body ? { "content-type": "application/json" } : {}) },

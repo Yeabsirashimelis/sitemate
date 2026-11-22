@@ -76,7 +76,7 @@ export interface SiteSpec {
   ld: number;
 }
 
-export async function seedDemo(db: Database, options: { today: string; password: string; reset: boolean; indexDocuments: boolean }) {
+export async function seedDemo(db: Database, options: { today: string; password: string; reset: boolean; indexDocuments: boolean; calendarId?: string | undefined }) {
   const [existing] = await db.select().from(companies).where(eq(companies.name, COMPANY));
   if (existing) {
     if (!options.reset) throw new Error(`"${COMPANY}" already exists. Run with --reset to recreate it.`);
@@ -84,7 +84,8 @@ export async function seedDemo(db: Database, options: { today: string; password:
   }
 
   const passwordHash = await hashPassword(options.password);
-  const [company] = await db.insert(companies).values({ name: COMPANY }).returning();
+  // The demo company writes to the calendar configured on the server, when there is one.
+  const [company] = await db.insert(companies).values({ name: COMPANY, googleCalendarId: options.calendarId || null }).returning();
   const companyId = company!.id;
   const person = async (name: string, role: (typeof users.$inferInsert)["role"], email: string | null, language: "en" | "am" = "en") => {
     const [row] = await db

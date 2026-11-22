@@ -123,6 +123,8 @@ export const claimPaymentStatus = pgEnum("payment_claim_status", ["draft", "pend
 export const companies = pgTable("companies", {
   id: id(),
   name: text("name").notNull(),
+  /** The company's own Google Calendar, shared with SiteMate's service account. Null means no calendar sync. */
+  googleCalendarId: text("google_calendar_id"),
   createdAt: createdAt(),
 });
 
@@ -883,9 +885,10 @@ export const calendarEvents = pgTable(
   "calendar_events",
   {
     id: id(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Cleared when the project is deleted; the event is then removed from Google by the next cleanup. */
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+    /** The calendar the event was written to, so it can be removed even after the company changes calendar. */
+    calendarId: text("calendar_id"),
     /** What the event stands for, e.g. "activity:B2100" or "rfi:<id>". */
     key: text("key").notNull(),
     googleEventId: text("google_event_id").notNull(),

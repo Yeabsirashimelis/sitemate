@@ -1,25 +1,41 @@
 import { generateKeyPairSync } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { calendarEvents, projects, rfis } from "../src/db/schema.js";
-import { eventId, queueCalendarSyncs, syncProjectCalendar } from "../src/features/calendar.js";
+import { calendarEvents, companies, projects, rfis } from "../src/db/schema.js";
+import { eventId, queueCalendarSyncs, removeOrphanEvents, syncProjectCalendar } from "../src/features/calendar.js";
 import { GoogleCalendar, type CalendarEvent, type CalendarProvider } from "../src/integrations/google-calendar.js";
 import { createTestApp, type TestApp } from "./helpers/app.js";
 import { setupSiteProject } from "./helpers/fixtures.js";
 
+const TEAM = "team@group.calendar.google.com";
+
+/** Google Calendar in memory: one map of events per calendar, and the calendars shared with SiteMate. */
 class FakeCalendar implements CalendarProvider {
-  events = new Map<string, CalendarEvent>();
+  readonly accountEmail = "sitemate@example.iam.gserviceaccount.com";
+  calendars = new Map<string, Map<string, CalendarEvent>>();
+  shared = new Set([TEAM, "site@group.calendar.google.com"]);
   writes = 0;
-  async upsert(id: string, event: CalendarEvent) {
-    this.writes++;
-    this.events.set(id, event);
+  on(calendarId: string) {
+    if (!this.calendars.has(calendarId)) this.calendars.set(calendarId, new Map());
+    return this.calendars.get(calendarId)!;
   }
-  async remove(id: string) {
-    this.writes++;
-    this.events.delete(id);
+  /** The team calendar most tests look at. */
+  get events() {
+    return this.on(TEAM);
   }
-  summaries() {
-    return [...this.events.values()].map((e) => e.summary).sort();
+  async upsert(calendarId: string, id: string, event: CalendarEvent) {
+    this.writes++;
+    this.on(calendarId).set(id, event);
+  }
+  async remove(calendarId: string, id: string) {
+    this.writes++;
+    this.on(calendarId).delete(id);
+  }
+  async canWrite(calendarId: string) {
+    return this.shared.has(calendarId);
+  }
+  summaries(calendarId = TEAM) {
+    return [...this.on(calendarId).values()].map((e) => e.summary).sort();
   }
 }
 
@@ -35,8 +51,15 @@ describe("calendar sync", () => {
     await t.close();
   });
 
+  async function connect(auth: Record<string, string>, calendarId: string | null) {
+    const response = await t.app.inject({ method: "PUT", url: "/company/calendar", headers: auth, payload: { calendarId } });
+    await t.runtime.runner.drain();
+    return response;
+  }
+
   it("puts the look-ahead, handover and deadlines on the calendar and only sends changes", async () => {
     const site = await setupSiteProject(t);
+    await t.handle.db.update(companies).set({ googleCalendarId: TEAM }).where(eq(companies.id, site.owner.company.id));
     await t.handle.db.insert(rfis).values({ projectId: site.projectId, number: 7, question: "Which rebar grade for the columns?", status: "sent", raisedOn: "2026-01-06", dueOn: "2026-01-10" });
 
     const first = await syncProjectCalendar(t.runtime.deps, site.projectId);
@@ -72,10 +95,54 @@ describe("calendar sync", () => {
     expect(calendar.summaries().filter((s) => s.includes("Bole"))).toHaveLength(0);
   });
 
-  it("queues one sync per project per hour", async () => {
-    await setupSiteProject(t);
-    expect(await queueCalendarSyncs(t.runtime.deps)).toBeGreaterThan(0);
+  it("queues one sync per project per hour, only for companies with a calendar", async () => {
+    await setupSiteProject(t); // no calendar connected: nothing to do
+    const before = await queueCalendarSyncs(t.runtime.deps);
+    const site = await setupSiteProject(t);
+    await t.handle.db.update(companies).set({ googleCalendarId: TEAM }).where(eq(companies.id, site.owner.company.id));
+    expect(await queueCalendarSyncs(t.runtime.deps)).toBe(1);
     expect(await queueCalendarSyncs(t.runtime.deps)).toBe(0);
+    expect(before).toBe(0);
+  });
+
+  it("connects a company's own calendar, moves events when it changes, and takes them off when disconnected", async () => {
+    const site = await setupSiteProject(t);
+    const site2 = "site@group.calendar.google.com";
+
+    const refused = await connect(site.owner.auth, "not-shared@group.calendar.google.com");
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.message).toContain(calendar.accountEmail);
+
+    expect((await connect(site.owner.auth, site2)).statusCode).toBe(200);
+    const mine = (cal: string) => calendar.summaries(cal).filter((s) => s.includes("Bole") && calendar.on(cal).has(eventId(site.projectId, "contract-finish")));
+    expect(mine(site2).length).toBeGreaterThan(2);
+    const status = (await t.app.inject({ method: "GET", url: `/projects/${site.projectId}/calendar`, headers: site.owner.auth })).json();
+    expect(status).toMatchObject({ available: true, connected: true, calendarId: site2, shareWith: calendar.accountEmail });
+
+    // Another company's projects never land on this calendar.
+    const other = await setupSiteProject(t);
+    await syncProjectCalendar(t.runtime.deps, other.projectId);
+    expect(calendar.on(site2).has(eventId(other.projectId, "contract-finish"))).toBe(false);
+
+    // Switching calendars moves the events.
+    await connect(site.owner.auth, TEAM);
+    expect(calendar.on(site2).has(eventId(site.projectId, "contract-finish"))).toBe(false);
+    expect(calendar.on(TEAM).has(eventId(site.projectId, "contract-finish"))).toBe(true);
+
+    await connect(site.owner.auth, null);
+    expect(calendar.on(TEAM).has(eventId(site.projectId, "contract-finish"))).toBe(false);
+    expect(await t.handle.db.select().from(calendarEvents).where(eq(calendarEvents.projectId, site.projectId))).toHaveLength(0);
+  });
+
+  it("takes a deleted project's events off the calendar", async () => {
+    const site = await setupSiteProject(t);
+    await connect(site.owner.auth, TEAM);
+    expect(calendar.on(TEAM).has(eventId(site.projectId, "contract-finish"))).toBe(true);
+
+    await t.handle.db.delete(projects).where(eq(projects.id, site.projectId));
+    expect(await removeOrphanEvents(t.runtime.deps)).toBeGreaterThan(2);
+    expect(calendar.on(TEAM).has(eventId(site.projectId, "contract-finish"))).toBe(false);
+    expect(await removeOrphanEvents(t.runtime.deps)).toBe(0);
   });
 
   it("makes event ids Google accepts", () => {
@@ -88,7 +155,7 @@ describe("calendar sync", () => {
     try {
       const site = await setupSiteProject(plain);
       const status = await plain.app.inject({ method: "GET", url: `/projects/${site.projectId}/calendar`, headers: site.owner.auth });
-      expect(status.json()).toMatchObject({ connected: false, events: 0 });
+      expect(status.json()).toMatchObject({ available: false, connected: false, events: 0 });
       const sync = await plain.app.inject({ method: "POST", url: `/projects/${site.projectId}/calendar/sync`, headers: site.owner.auth });
       expect(sync.statusCode).toBe(409);
     } finally {
@@ -122,16 +189,23 @@ describe("Google Calendar client", () => {
 
   it("creates the event when it is not there yet and reuses the token", async () => {
     const google = fakeGoogle({ "PUT /events/smabc": 404 });
-    const client = new GoogleCalendar(account, "team@group.calendar.google.com", google.fetchImpl);
-    await client.upsert("smabc", event);
-    await client.remove("smabc");
+    const client = new GoogleCalendar(account, google.fetchImpl);
+    await client.upsert(TEAM, "smabc", event);
+    await client.remove(TEAM, "smabc");
     expect(google.calls).toEqual(["token", "PUT /events/smabc", "POST /events", "DELETE /events/smabc"]);
   });
 
   it("treats a missing event on delete as done and reports real failures", async () => {
     const google = fakeGoogle({ "DELETE /events/gone": 410, "PUT /events/locked": 403 });
-    const client = new GoogleCalendar(account, "team@group.calendar.google.com", google.fetchImpl);
-    await expect(client.remove("gone")).resolves.toBeUndefined();
-    await expect(client.upsert("locked", event)).rejects.toThrow("Google Calendar 403: nope");
+    const client = new GoogleCalendar(account, google.fetchImpl);
+    await expect(client.remove(TEAM, "gone")).resolves.toBeUndefined();
+    await expect(client.upsert(TEAM, "locked", event)).rejects.toThrow("Google Calendar 403: nope");
+  });
+
+  it("tells whether a calendar has been shared with SiteMate", async () => {
+    const google = fakeGoogle({ "GET /events": 404 });
+    const client = new GoogleCalendar(account, google.fetchImpl);
+    expect(await client.canWrite("someone-else@group.calendar.google.com")).toBe(false);
+    expect(client.accountEmail).toBe(account.client_email);
   });
 });

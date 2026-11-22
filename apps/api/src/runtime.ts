@@ -184,15 +184,17 @@ export async function createRuntime(config: Config, overrides: RuntimeOverrides 
   };
 }
 
-/** Google Calendar when both the calendar id and the service account key are there. */
+/**
+ * Google Calendar when the service account key is there. Each company then
+ * connects its own calendar by sharing it with the service account.
+ */
 async function openCalendar(config: Config, logger: Logger): Promise<CalendarProvider | null> {
-  if (!config.GOOGLE_CALENDAR_ID) return null;
   try {
     const account = await loadServiceAccount(config.GOOGLE_SERVICE_ACCOUNT_FILE);
-    logger.info({ calendar: config.GOOGLE_CALENDAR_ID.slice(0, 8) }, "google calendar sync on");
-    return new GoogleCalendar(account, config.GOOGLE_CALENDAR_ID);
-  } catch (error) {
-    logger.warn({ err: error, file: config.GOOGLE_SERVICE_ACCOUNT_FILE }, "google calendar is configured but the service account key could not be read, sync is off");
+    logger.info({ account: account.client_email }, "google calendar sync available");
+    return new GoogleCalendar(account);
+  } catch {
+    logger.info({ file: config.GOOGLE_SERVICE_ACCOUNT_FILE }, "no google service account key, calendar sync is off");
     return null;
   }
 }

@@ -25,6 +25,7 @@ try {
     password,
     reset: process.argv.includes("--reset"),
     indexDocuments: !!config.GEMINI_API_KEY,
+    calendarId: config.GOOGLE_CALENDAR_ID,
   });
   console.log("Seeded Abay Construction PLC");
   for (const s of result.summary) {
